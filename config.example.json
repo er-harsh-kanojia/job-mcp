@@ -1,0 +1,60 @@
+{
+  "resume_path": "",
+  "name": "Your Name",
+  "email": "your.email@example.com",
+  "phone": "9876543210",
+  "location": "Bengaluru, India",
+  "experience_years": 4,
+  "excluded_companies": [],
+  "credentials": {
+    "naukri": {
+      "email": "",
+      "password": ""
+    },
+    "instahyre": {
+      "email": "",
+      "password": ""
+    },
+    "hirist": {
+      "email": "",
+      "password": ""
+    },
+    "linkedin": {
+      "email": "",
+      "password": ""
+    },
+    "wellfound": {
+      "email": "",
+      "password": ""
+    },
+    "indeed": {
+      "email": "",
+      "password": ""
+    }
+  },
+  "autofill": {
+    "current_ctc": "12.00",
+    "expected_ctc": "20.00",
+    "total_experience": "4",
+    "notice_period": "30 days",
+    "gender": "male",
+    "date_of_birth": "",
+    "primary_cloud": "AWS",
+    "contract_based": "No",
+    "offer_in_hand": "No",
+    "highest_qualification": "B.Tech",
+    "graduation_year": "2022",
+    "last_working_day": "Currently Working",
+    "experience": {
+      "python": "4",
+      "machine learning": "3",
+      "fastapi": "2",
+      "sql": "3"
+    },
+    "preferred_locations": [
+      "Bengaluru",
+      "Remote",
+      "Hyderabad"
+    ]
+  }
+}
