@@ -1,0 +1,19 @@
+# Browser automation (run `python -m playwright install chromium` after installing)
+playwright>=1.45
+# Official MCP Python SDK. Pinned below 2.0: server.py uses mcp.server.fastmcp.FastMCP
+# (renamed to MCPServer in 2.x; server.py falls back to that automatically).
+mcp>=1.10,<2
+
+# Local web API (app.py / api/)
+fastapi>=0.115
+uvicorn>=0.30
+sse-starlette>=2.1
+python-multipart>=0.0.9
+pydantic>=2.7
+
+# AI resume review / prep / mock interviews (tools/ai/)
+anthropic>=1.0
+openai>=2.0
+pypdf>=4.0
+python-docx>=1.1
+python-dotenv>=1.0

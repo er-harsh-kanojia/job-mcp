@@ -1,0 +1,29 @@
+# secrets / personal data
+config.json
+*.tmp
+.env
+.env.*
+!.env.example
+.sessions/
+data/
+
+# environments / caches
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# node / frontend
+node_modules/
+dist/
+.npm/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
