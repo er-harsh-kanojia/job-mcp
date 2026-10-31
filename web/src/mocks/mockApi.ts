@@ -489,6 +489,28 @@ export function createMockApi(): Api {
     lastSearch: () => net(() => lastSearch),
 
     applyPreview: ({ apply_urls, max_applications }) => net(() => plan(apply_urls, max_applications), 300),
+    recordExternalApply: (body) =>
+      net(() => {
+        const url = body.apply_url;
+        const now = localIso();
+        const app: Application = {
+          id: apps.length + 1,
+          platform: (body.platform as Platform) || 'naukri',
+          job_id: `ext_${Date.now()}`,
+          title: body.title || 'External Role',
+          company: body.company || 'External Company',
+          location: body.location || '',
+          apply_url: url,
+          status: 'applied',
+          error: 'Applied externally on employer site',
+          applied_at: now,
+        };
+        apps.unshift(app);
+        jobs.forEach((j) => {
+          if (j.apply_url === url) j.already_applied = true;
+        });
+        return { ok: true, apply_url: url, status: 'applied' };
+      }, 200),
     apply: ({ apply_urls, max_applications, dry_run, confirm }) =>
       net(() => {
         if (!dry_run && confirm !== 'APPLY') throw new ApiError(400, 'confirm_required', 'Live runs need confirm: "APPLY".');

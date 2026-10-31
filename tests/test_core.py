@@ -40,7 +40,7 @@ os.environ["JOB_MCP_DB"] = str(Path(_TMP) / "test_applications.db")
 
 from tools import config, tracker  # noqa: E402
 from tools.autofill import answer_question, find_skill  # noqa: E402
-from tools.normalize import (OPEN_ENDED, canonical_url, dedupe_jobs, normalize_job,  # noqa: E402
+from tools.normalize import (OPEN_ENDED, canonical_url, dedupe_jobs, detect_visa_sponsorship, normalize_job,  # noqa: E402
                              parse_experience, parse_posted_days)
 from tools.platforms import PLANNED_PLATFORMS, SUPPORTED_PLATFORMS, get_adapter_class  # noqa: E402
 from tools.platforms import indeed, instahyre, naukri  # noqa: E402
@@ -92,8 +92,20 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(j["company"], "Unknown")
         for key in ("platform", "job_id", "title", "company", "location", "salary", "apply_url",
                     "description", "skills", "exp_min", "exp_max", "posted_days_ago",
-                    "match_score", "rank_score", "easy_apply"):
+                    "match_score", "rank_score", "easy_apply", "visa_sponsored"):
             self.assertIn(key, j)
+
+    def test_detect_visa_sponsorship(self):
+        self.assertTrue(detect_visa_sponsorship(description="Full work visa sponsorship and relocation support provided."))
+        self.assertTrue(detect_visa_sponsorship(title="Senior ML Engineer (Relocation / Visa Support)"))
+        self.assertTrue(detect_visa_sponsorship(description="EU Blue Card sponsorship available for qualified candidates."))
+        self.assertTrue(detect_visa_sponsorship(company="Booking.com"))
+        self.assertTrue(detect_visa_sponsorship(company="Amazon Web Services"))
+        self.assertTrue(detect_visa_sponsorship(company="Spotify"))
+        # Negatives
+        self.assertFalse(detect_visa_sponsorship(description="We cannot sponsor work visas at this time."))
+        self.assertFalse(detect_visa_sponsorship(description="Must be authorized to work without visa sponsorship."))
+        self.assertFalse(detect_visa_sponsorship(title="Java Dev", description="Spring boot developer in Delhi", company="Acme"))
 
     def test_canonical_url(self):
         self.assertEqual(canonical_url("https://In.Indeed.com/viewjob?jk=abc&from=serp&vjs=3#x"),
@@ -198,6 +210,15 @@ class TestScoring(unittest.TestCase):
         ]
         score_jobs(jobs, ["ML Engineer"], 4, PROFILE_SKILLS, PREFS)
         out = filter_jobs(jobs, min_match_score=0.25, experience_years=4, exclude_companies=["excludeme"])
+
+        # Test visa_sponsored_only filter
+        j_visa = job(apply_url="v1", title="Staff ML Engineer", company="Booking.com", visa_sponsored=True)
+        j_normal = job(apply_url="v2", title="ML Engineer", company="Local Co", visa_sponsored=False)
+        score_jobs([j_visa, j_normal], ["ML Engineer"], 4, PROFILE_SKILLS, PREFS)
+        v_out = filter_jobs([j_visa, j_normal], min_match_score=0.25, experience_years=4, visa_sponsored_only=True)
+        self.assertEqual([j["apply_url"] for j in v_out], ["v1"])
+        all_out = filter_jobs([j_visa, j_normal], min_match_score=0.25, experience_years=4, visa_sponsored_only=False)
+        self.assertEqual(len(all_out), 2)
         urls = [j["apply_url"] for j in out]
         self.assertIn("a", urls)
         self.assertNotIn("b", urls)

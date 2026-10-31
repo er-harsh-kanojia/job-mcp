@@ -20,6 +20,7 @@ export type Job = {
   match_score: number;
   rank_score: number;
   easy_apply: boolean;
+  visa_sponsored?: boolean;
   already_applied: boolean;
 };
 
@@ -85,6 +86,7 @@ export type SearchParams = {
   /** Maximum jobs to return; null means no overall cap. */
   max_jobs: number | null;
   exclude_companies?: string[];
+  visa_sponsored_only?: boolean;
 };
 export type PlatformRunState = 'queued' | 'fetching' | 'done' | 'failed' | 'skipped';
 export type PlatformFailReason = 'captcha_required' | 'session_expired' | 'timeout' | 'error';

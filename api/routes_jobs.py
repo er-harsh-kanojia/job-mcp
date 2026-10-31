@@ -190,6 +190,7 @@ class SearchBody(BaseModel):
     limit_per_platform: int | None = Field(None, ge=1, le=200)
     max_jobs: int | None = Field(50, ge=1, le=1000)
     exclude_companies: list[str] | None = None
+    visa_sponsored_only: bool = False
 
 
 @router.post("/search")
@@ -206,7 +207,7 @@ async def start_search(body: SearchBody):
     exclude_comps = [c.strip() for c in body.exclude_companies if c and c.strip()] if body.exclude_companies is not None else get_excluded_companies()
     params = {"keywords": keywords, "location": body.location, "experience_years": exp,
               "platforms": wanted, "min_match_score": body.min_match_score, "max_jobs": body.max_jobs,
-              "exclude_companies": exclude_comps}
+              "exclude_companies": exclude_comps, "visa_sponsored_only": body.visa_sponsored_only}
 
     async def run(task: Task):
         state: dict[str, dict] = {}       # platform -> aggregated status
@@ -286,7 +287,8 @@ async def start_search(body: SearchBody):
         if body.max_jobs is not None:
             all_jobs = all_jobs[:body.max_jobs]
         filtered = search_mod.filter_jobs(all_jobs, min_match_score=body.min_match_score, experience_years=exp,
-                                          exclude_companies=exclude_comps)
+                                          exclude_companies=exclude_comps,
+                                          visa_sponsored_only=body.visa_sponsored_only)
         finals = [st.get("final") or {"platform": p, "state": st["state"], "count": st["count"]}
                   for p, st in state.items()]
         tracker.save_search_run(params, finals, filtered, all_jobs)
@@ -385,6 +387,31 @@ async def start_apply(body: ApplyBody):
     task = manager.start("apply", run)
     task.meta = {"dry_run": body.dry_run, "requested": len(body.apply_urls)}
     return {"task_id": task.id}
+
+
+class ExternalApplyBody(BaseModel):
+    apply_url: str
+    title: str | None = None
+    company: str | None = None
+    platform: str | None = None
+    location: str | None = None
+
+
+@router.post("/apply/external")
+def record_external_apply(body: ExternalApplyBody):
+    url = (body.apply_url or "").strip()
+    if not url:
+        raise ApiError(400, "missing_url", "apply_url is required.")
+    tracker.record(
+        apply_url=url,
+        title=body.title or "",
+        company=body.company or "",
+        platform=body.platform or "external",
+        location=body.location or "",
+        status="applied",
+        error="Applied externally on employer site",
+    )
+    return {"ok": True, "apply_url": url, "status": "applied"}
 
 
 # ------------------------------------------------------------- applications

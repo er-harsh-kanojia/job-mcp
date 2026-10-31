@@ -58,6 +58,7 @@ export interface Api {
 
   applyPreview(body: { apply_urls: string[]; max_applications: number }): Promise<ApplyPreview>;
   apply(body: ApplyRequest): Promise<TaskRef>;
+  recordExternalApply(body: { apply_url: string; title?: string; company?: string; platform?: PlatformId; location?: string }): Promise<{ ok: boolean; apply_url: string; status: string }>;
 
   applications(q: ApplicationsQuery): Promise<{ applications: Application[] }>;
   stats(): Promise<Stats>;

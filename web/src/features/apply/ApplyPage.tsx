@@ -150,10 +150,32 @@ function ReviewStep({ urls, preview, loading, error, live, down, onBack, onMaxEd
                 <PlatformBadge id={p.job.platform} />
               </span>
               <span className="c-m mono">{p.job.match_score.toFixed(2)}</span>
-              <span style={{ minWidth: 0 }}>
+              <span style={{ minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span className={cx('pill', p.will ? 'st-will' : 'st-skipped')} style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.reason}>
                   {p.will ? (live ? 'Will apply' : 'Will simulate') : `Skip · ${p.reason.split('.')[0]}`}
                 </span>
+                {!p.will && (
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-external"
+                    onClick={() => {
+                      window.open(p.job.apply_url, '_blank', 'noopener,noreferrer');
+                      void api.recordExternalApply({
+                        apply_url: p.job.apply_url,
+                        title: p.job.title,
+                        company: p.job.company,
+                        platform: p.job.platform,
+                        location: p.job.location,
+                      }).then(() => {
+                        search.markApplied([p.job.apply_url]);
+                      });
+                    }}
+                    title="Open employer application portal in a new tab"
+                  >
+                    <span>Apply on site</span>
+                    <Icon name="external" small />
+                  </button>
+                )}
               </span>
               <button className="btn btn-ghost btn-sm btn-icon c-x" onClick={() => search.toggle(p.job.apply_url)} aria-label={`Remove ${p.job.title} from selection`}>
                 <Icon name="x" small />
@@ -369,6 +391,7 @@ function ResultsStep() {
   const a = useApply();
   const ui = useUi();
   const nav = useNavigate();
+  const search = useSearch();
   const r = a.run;
   if (!r) return null;
   const rows = r.order.map((u) => r.rows[u]);
@@ -402,8 +425,29 @@ function ResultsStep() {
       <span className="c-plat">
         <PlatformBadge id={x.platform} />
       </span>
-      <span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span className={`pill ${SP[x.state][0]}`}>{SP[x.state][1]}</span>
+        {(x.state === 'skipped' || x.state === 'failed') && (
+          <button
+            type="button"
+            className="btn btn-xs btn-external"
+            onClick={() => {
+              window.open(x.url, '_blank', 'noopener,noreferrer');
+              void api.recordExternalApply({
+                apply_url: x.url,
+                title: x.title,
+                company: x.company,
+                platform: x.platform,
+              }).then(() => {
+                search.markApplied([x.url]);
+              });
+            }}
+            title="Open external application site in new tab"
+          >
+            <span>Apply on site</span>
+            <Icon name="external" small />
+          </button>
+        )}
       </span>
     </li>
   );

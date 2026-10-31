@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Job, Platform, PlatformInfo, SearchPlatformEvent } from '../../api/types';
-import { errorMessage } from '../../api';
+import { api, errorMessage } from '../../api';
 import { Icon } from '../../components/Icon';
 import { Alert, cx, EmptyState, MatchScore, Pill, PlatformBadge, SkeletonRows } from '../../components/ui';
 import { expLabel, joinList, LIVE_PLATFORMS, matchColor, pct, platName, PLATFORM_ORDER, postedLabel, salaryLow, skillLabel } from '../../lib/format';
@@ -70,12 +70,15 @@ export function SearchPage() {
     [s.params.exclude_companies],
   );
 
+  const visaCount = useMemo(() => s.jobs.filter((j) => j.visa_sponsored).length, [s.jobs]);
+
   const rows = useMemo(() => {
     const k = SORT_FN[sort];
     const d = dir === 'asc' ? 1 : -1;
     return s.jobs
       .filter((j) => {
         if (j.match_score < s.minScore - 1e-9) return false;
+        if (s.visaOnly && !j.visa_sponsored) return false;
         if (excludedLower.length > 0) {
           const comp = (j.company || '').toLowerCase();
           if (excludedLower.some((ex) => comp === ex || comp.includes(ex))) return false;
@@ -83,7 +86,20 @@ export function SearchPage() {
         return true;
       })
       .sort((a, b) => (k(a) - k(b)) * d || b.rank_score - a.rank_score);
-  }, [s.jobs, s.minScore, sort, dir, excludedLower]);
+  }, [s.jobs, s.minScore, s.visaOnly, sort, dir, excludedLower]);
+
+  const handleExternalApply = (j: Job) => {
+    window.open(j.apply_url, '_blank', 'noopener,noreferrer');
+    void api.recordExternalApply({
+      apply_url: j.apply_url,
+      title: j.title,
+      company: j.company,
+      platform: j.platform,
+      location: j.location,
+    }).then(() => {
+      s.markApplied([j.apply_url]);
+    });
+  };
   const f = Math.max(0, Math.min(focus, rows.length - 1));
 
   // Keyboard: J/K move, X select, Enter open, / focus keywords (design hints in the results toolbar).
@@ -228,6 +244,7 @@ export function SearchPage() {
           <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} className="num">
             {s.params.keywords.length} keywords · {s.params.location || 'Anywhere'} · {s.params.experience_years} yrs · ≥ {s.minScore.toFixed(2)}
             {(s.params.exclude_companies?.length ?? 0) > 0 ? ` · ${s.params.exclude_companies?.length} excluded` : ''}
+            {s.visaOnly ? ' · 🌍 Visa only' : ''}
           </span>
         </button>
         <button className="btn btn-primary" style={{ minHeight: 44, width: 44, padding: 0 }} onClick={() => void s.run()} disabled={runDisabled} aria-label="Run search">
@@ -304,6 +321,24 @@ export function SearchPage() {
               placeholder="Exclude company (e.g. TCS, Infosys), Enter"
               aria-label="Exclude company"
             />
+          </div>
+        </div>
+        <div className="frow" style={{ marginTop: 12, alignItems: 'center' }}>
+          <span className="lbl flbl" id="visa-filter-label">
+            Sponsorship
+          </span>
+          <div className="chips" role="group" aria-labelledby="visa-filter-label">
+            <button
+              type="button"
+              className={cx('chip chip-visa', s.visaOnly && 'chip-on')}
+              onClick={() => s.setVisaOnly(!s.visaOnly)}
+              aria-pressed={s.visaOnly}
+              title="Show only companies offering work visa sponsorship"
+            >
+              <span style={{ fontSize: '13px' }}>🌍</span>
+              <span>Work Visa Sponsorship Only</span>
+              {visaCount > 0 && <span className="cnt">({visaCount})</span>}
+            </button>
           </div>
         </div>
         <div className="fgrid">
@@ -569,6 +604,7 @@ export function SearchPage() {
                         >
                           {j.title}
                         </button>
+                        {j.visa_sponsored && <span className="pill pill-visa" title="Work visa sponsorship / relocation supported">🌍 Visa</span>}
                         {j.already_applied && <span className="pill st-applied">Applied</span>}
                       </div>
                       <div className="rsub">{j.company}</div>
@@ -595,7 +631,18 @@ export function SearchPage() {
                           Easy Apply
                         </span>
                       ) : (
-                        <span className="help">External</span>
+                        <button
+                          type="button"
+                          className="btn btn-external"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExternalApply(j);
+                          }}
+                          title="Open external application site in new tab"
+                        >
+                          <span>Apply on site</span>
+                          <Icon name="external" small />
+                        </button>
                       )}
                     </span>
                     <span role="cell" style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -623,6 +670,7 @@ export function SearchPage() {
                     </button>
                     <div className="help">
                       {j.company}
+                      {j.visa_sponsored && <span className="pill pill-visa">🌍 Visa</span>}
                       {j.already_applied ? ' · Applied' : ''}
                     </div>
                   </div>
@@ -640,7 +688,23 @@ export function SearchPage() {
                     <span className="num">{j.salary}</span>
                     <span className="num">{expLabel(j.exp_min, j.exp_max)}</span>
                     <span className={j.posted_days_ago === 0 ? 'fresh' : ''}>{postedLabel(j.posted_days_ago)}</span>
-                    <span>{j.easy_apply ? 'Easy Apply' : 'External'}</span>
+                    <span>
+                      {j.easy_apply ? (
+                        'Easy Apply'
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-external"
+                          style={{ padding: '0 6px', height: 20, fontSize: 11 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExternalApply(j);
+                          }}
+                        >
+                          <span>Apply ↗</span>
+                        </button>
+                      )}
+                    </span>
                   </div>
                 </article>
               );
@@ -698,6 +762,7 @@ export function SearchPage() {
           mine={mine}
           prefLocs={prefLocs}
           onClose={() => setDrawer(null)}
+          onExternalApply={handleExternalApply}
           onMove={(i) => {
             setFocus(i);
             setDrawer(rows[i].apply_url);

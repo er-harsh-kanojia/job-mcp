@@ -146,6 +146,7 @@ export function createHttpApi(): Api {
 
     applyPreview: (body) => request('POST', '/apply/preview', body),
     apply: (body) => request('POST', '/apply', body),
+    recordExternalApply: (body) => request('POST', '/apply/external', body),
 
     applications: (q) => {
       const p = new URLSearchParams();

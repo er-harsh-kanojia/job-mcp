@@ -15,6 +15,8 @@ type SearchCtx = {
   /** Client-side minimum match filter (the slider). Runs send it as min_match_score. */
   minScore: number;
   setMinScore: (n: number) => void;
+  visaOnly: boolean;
+  setVisaOnly: (on: boolean) => void;
   running: boolean;
   hasRun: boolean;
   /** Platforms included in the current or last run. */
@@ -55,6 +57,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     exclude_companies: [],
   });
   const [minScore, setMinScore] = useState(DEFAULT_MIN);
+  const [visaOnly, setVisaOnly] = useState(false);
   const [running, setRunning] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [runPlatforms, setRunPlatforms] = useState<Platform[]>([]);
@@ -122,7 +125,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
 
   const run = useCallback(
     async (override?: Partial<SearchParams>) => {
-      const initial: SearchParams = { ...params, ...override, min_match_score: override?.min_match_score ?? minScore };
+      const initial: SearchParams = { ...params, ...override, min_match_score: override?.min_match_score ?? minScore, visa_sponsored_only: override?.visa_sponsored_only ?? visaOnly };
       const maxJobs = await askMaxJobs(initial.max_jobs ?? 50);
       if (maxJobs === undefined) return;
       setParamsState((cur) => ({ ...cur, max_jobs: maxJobs }));
@@ -203,6 +206,8 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       setParams,
       minScore,
       setMinScore,
+      visaOnly,
+      setVisaOnly,
       running,
       hasRun,
       runPlatforms,
@@ -219,7 +224,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       jobByUrl: (u) => known.current.get(u),
       markApplied,
     };
-  }, [params, setParams, minScore, running, hasRun, runPlatforms, platformEvents, jobs, total, finishedAt, error, run, selected, toggle, markApplied]);
+  }, [params, setParams, minScore, running, hasRun, runPlatforms, platformEvents, jobs, total, finishedAt, error, run, selected, toggle, markApplied, visaOnly]);
 
   return (
     <Ctx.Provider value={value}>
