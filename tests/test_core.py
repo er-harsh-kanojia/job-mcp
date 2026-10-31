@@ -336,7 +336,25 @@ class TestParsers(unittest.TestCase):
         self.assertEqual((j["exp_min"], j["exp_max"]), (3, 6))
         self.assertIn("20–35 LPA", j["salary"])
         self.assertEqual(hirist.build_search_url(["Python"], "Bengaluru"),
-                         "https://www.hirist.tech/search?query=Python&loc=Bengaluru")
+                         "https://www.hirist.tech/search/Python?loc=Bengaluru")
+
+        dom_item = {
+            "url": "https://www.hirist.tech/j/latentbridge-senior-backend-python-engineer-1680781?ref=sp_prm",
+            "title": "LatentBridge - Senior Backend Python Engineer",
+            "company": "",
+            "location": "Bengaluru",
+            "salary": "25-40 LPA",
+            "exp": "10 - 15 yrs",
+            "skills": ["Python", "Django", "FastAPI"],
+            "snippet": "We are looking for Senior Python Engineer",
+            "posted": "Posted 3 days ago",
+        }
+        parsed = hirist.parse_dom_item(dom_item)
+        self.assertEqual(parsed["company"], "LatentBridge")
+        self.assertEqual(parsed["title"], "Senior Backend Python Engineer")
+        self.assertEqual(parsed["job_id"], "1680781")
+        self.assertEqual(parsed["apply_url"], "https://www.hirist.tech/j/latentbridge-senior-backend-python-engineer-1680781")
+        self.assertEqual((parsed["exp_min"], parsed["exp_max"]), (10, 15))
 
 
 class TestRegistry(unittest.TestCase):
