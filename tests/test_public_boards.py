@@ -80,7 +80,7 @@ class HimalayasTest(unittest.TestCase):
             return httpx.Response(200, json={"jobs": items})
 
         with fake_http(handler):
-            jobs = asyncio.run(himalayas.HimalayasAdapter().search(["ML Engineer"], "Noida", 3, limit=40))
+            jobs = asyncio.run(himalayas.HimalayasAdapter().search(["ML Engineer"], "Pune", 3, limit=40))
         self.assertEqual(len(jobs), 25)
         self.assertEqual([c["page"] for c in calls], ["1", "2"])           # stops on a short page
         self.assertEqual(calls[0]["country"], "India")
