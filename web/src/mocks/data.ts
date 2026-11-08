@@ -5,6 +5,8 @@ const URL_BASE: Record<Platform, string> = {
   naukri: 'https://www.naukri.com/job-listings-',
   instahyre: 'https://www.instahyre.com/job-',
   hirist: 'https://www.hirist.tech/j/',
+  himalayas: 'https://himalayas.app/companies/acme/jobs/',
+  ycombinator: 'https://www.ycombinator.com/companies/acme/jobs/',
 };
 
 type Raw = [string, string, string, Platform, string, string, [number, number], number, boolean, number, number, string[], string, boolean?, boolean?];
@@ -54,7 +56,8 @@ export function makeJobs(): Job[] {
   }));
 }
 
-export const COUNTS: Record<Platform, number> = { naukri: 42, instahyre: 29, hirist: 16 };
+// Public boards have no Easy Apply jobs in the mock (they're applied to on the site).
+export const COUNTS: Record<Platform, number> = { naukri: 42, instahyre: 29, hirist: 16, himalayas: 0, ycombinator: 0 };
 
 /** Failures simulated during apply. j12 succeeds on retry; j9 never does. */
 export const FAILS: Record<string, { reason: string; permanent: boolean }> = {

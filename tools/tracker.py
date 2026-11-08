@@ -100,6 +100,16 @@ def has_applied(apply_url: str) -> bool:
     return row["status"] == "skipped" and (row["error"] or "").lower().startswith("already applied")
 
 
+def last_attempt(apply_url: str) -> dict | None:
+    """The latest recorded outcome for a job: {status, error, applied_at}, or None."""
+    if not apply_url:
+        return None
+    with _connect() as conn:
+        row = conn.execute("SELECT status, error, applied_at FROM applications WHERE apply_url = ?",
+                           (_key(apply_url),)).fetchone()
+    return dict(row) if row else None
+
+
 def record(job: dict | None = None, status: str = "applied", error: str | None = None, *,
            platform: str | None = None, job_id: str | None = None, title: str | None = None,
            company: str | None = None, location: str | None = None,

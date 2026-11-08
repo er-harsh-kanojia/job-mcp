@@ -7,7 +7,7 @@ import { LIVE_PLATFORMS } from '../lib/format';
 import { qk, useLastSearch, useProfile } from '../lib/queries';
 
 export const DEFAULT_KEYWORDS = ['AI/ML Engineer', 'ML Engineer', 'AI Engineer', 'Python AI Engineer', 'AI Cloud Engineer', 'GenAI Engineer', 'LLM Engineer', 'Deep Learning Engineer'];
-export const DEFAULT_MIN = 0.25;
+export const DEFAULT_MIN = 0.6;
 
 type SearchCtx = {
   params: SearchParams;
@@ -183,7 +183,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [params, minScore, qc, askMaxJobs],
+    [params, minScore, visaOnly, qc, askMaxJobs],
   );
 
   const toggle = useCallback((url: string) => {

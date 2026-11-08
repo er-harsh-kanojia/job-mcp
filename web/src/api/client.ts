@@ -4,6 +4,8 @@ import type {
   Application,
   ApplicationsQuery,
   ApplyPreview,
+  AutopilotStatus,
+  AutopilotUpdate,
   ApplyRequest,
   Health,
   InterviewDone,
@@ -17,11 +19,13 @@ import type {
   PlatformInfo,
   Profile,
   ProfileUpdate,
+  PendingQuestion,
   Question,
   ReportFormat,
   ResumeFile,
   Review,
   ReviewSummary,
+  SavedAnswer,
   SearchParams,
   Stats,
   TaskEvents,
@@ -82,6 +86,18 @@ export interface Api {
   /** Streams the assistant reply. onDelta receives each text chunk; resolves with the final `done` payload. */
   sendInterview(sessionId: string, content: string, onDelta: (text: string) => void, signal?: AbortSignal): Promise<InterviewDone>;
   getInterview(sessionId: string): Promise<InterviewSessionState>;
+
+  answers(): Promise<{ answers: SavedAnswer[]; pending: PendingQuestion[] }>;
+  addAnswer(question: string, answer: string): Promise<SavedAnswer>;
+  updateAnswer(id: number, answer: string): Promise<SavedAnswer>;
+  deleteAnswer(id: number): Promise<unknown>;
+  /** Answer a waiting question once; it's saved and reused from now on. */
+  answerPending(id: number, answer: string): Promise<SavedAnswer>;
+  dismissPending(id: number): Promise<unknown>;
+
+  autopilot(): Promise<AutopilotStatus>;
+  setAutopilot(body: AutopilotUpdate): Promise<AutopilotStatus>;
+  runAutopilot(): Promise<TaskRef>;
 
   task(id: string): Promise<TaskSnapshot>;
   /** Tasks the server still holds, newest first (e.g. a bulk apply still running after a reload). */

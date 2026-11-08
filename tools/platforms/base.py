@@ -44,12 +44,17 @@ class PlatformAdapter(ABC):
     search_timeout: float = 90.0
     #: whether search() needs a logged-in session
     search_requires_login: bool = False
+    #: False for public boards (no account; their jobs are applied to on the site)
+    login_required: bool = True
 
     def __init__(self, context=None):
         self.context = context
         #: set by search() when it had to give up early for a known reason
         #: ("captcha_required" / "session_expired"); read by tools.search
         self.search_issue: str | None = None
+        #: seconds to wait for the person to answer a question the bot can't; 0 = unattended
+        #: (autopilot): the question is saved for the Answers page and the job is skipped.
+        self.human_wait: int | None = None
         self.log = logging.getLogger(f"job_mcp.{self.name or 'platform'}")
 
     # ------------------------------------------------------------ contexts

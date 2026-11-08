@@ -108,6 +108,10 @@ p {
 .p-linkedin { --pc: var(--plat-linkedin); }
 .p-wellfound { --pc: var(--plat-wellfound); }
 .p-hirist { --pc: var(--plat-hirist); }
+.p-himalayas { --pc: var(--plat-himalayas); }
+.p-ycombinator { --pc: var(--plat-ycombinator); }
+.p-welcometothejungle { --pc: var(--plat-wttj); }
+.p-hiringcafe { --pc: var(--plat-hiringcafe); }
 
 /* pills */
 .pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; white-space: nowrap; border: 1px solid transparent; }
@@ -238,6 +242,9 @@ textarea.input { height: auto; padding: 8px 10px; resize: vertical; line-height:
 .trow-compact { min-height: 36px; }
 .thead { min-height: 34px; background: var(--surface-2); font-size: 11.5px; font-weight: 500; color: var(--text-3); }
 .jrow { transition: background 0.1s var(--ease); }
+/* Long result lists: the browser skips layout and paint for rows outside the viewport. */
+.jrow { content-visibility: auto; contain-intrinsic-size: auto 54px; }
+.jrow.trow-compact { contain-intrinsic-size: auto 36px; }
 .jrow:hover { background: var(--surface-2); }
 .jrow-sel { background: var(--accent-soft); }
 .jrow-sel:hover { background: var(--accent-soft); }
@@ -329,6 +336,8 @@ textarea.input { height: auto; padding: 8px 10px; resize: vertical; line-height:
 .ritem { display: grid; grid-template-columns: minmax(0, 1fr) 104px 128px; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .ritem:last-child { border-bottom: 0; }
 .ritem-active { background: var(--info-soft); }
+/* Long apply lists (hundreds of jobs): skip layout and paint for items outside the viewport. */
+.pitem, .ritem { content-visibility: auto; contain-intrinsic-size: auto 60px; }
 .ptitle { font-weight: 500; }
 .reason { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .reason-bad { color: var(--danger); }
@@ -574,7 +583,7 @@ button.rl { cursor: pointer; }
 }
 
 /* mobile job card (Mobile.dc.html) */
-.jcard { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 8px; padding: 12px 14px 12px 4px; align-items: start; border-radius: 12px; }
+.jcard { content-visibility: auto; contain-intrinsic-size: auto 120px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 4px 8px; padding: 12px 14px 12px 4px; align-items: start; border-radius: 12px; }
 .jcard-sel { background: var(--accent-soft); border-color: transparent; }
 .jcard-focus { outline: 2px solid var(--focus); outline-offset: -2px; }
 .jcard .cbx { width: 44px; height: 44px; margin-top: -12px; }

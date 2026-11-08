@@ -358,7 +358,8 @@ class TestHealthAndPlatforms(ApiTestCase):
         from tools.browser import mark_logged_in
         mark_logged_in("naukri")
         ps = {p["id"]: p for p in self.client.get("/api/platforms").json()["platforms"]}
-        self.assertEqual(set(ps), {"naukri", "instahyre", "indeed", "linkedin", "wellfound", "hirist"})
+        self.assertEqual(set(ps), {"naukri", "instahyre", "hirist", "himalayas", "ycombinator", "indeed", "linkedin",
+                                   "wellfound", "welcometothejungle", "hiringcafe"})
         self.assertTrue(ps["naukri"]["live"])
         self.assertEqual(ps["naukri"]["session"], "logged_in")
         self.assertIsNotNone(ps["naukri"]["last_checked"])

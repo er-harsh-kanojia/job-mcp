@@ -269,13 +269,19 @@ class HiristAdapter(PlatformAdapter):
     search_requires_login = False
 
     async def is_logged_in(self, page) -> bool:
-        """Check login state using cookies and visible user profile selectors."""
-        try:
-            names = await cookie_names(page)
-            if any(k in names for k in ("auth_token", "jwt", "user_id", "sessionid", "token", "logged_in", "user_token")):
-                return True
-        except Exception as exc:
-            self.log.debug("hirist: cookie check failed: %s", exc)
+        """Check login state: the seeker session cookie first, then the page header.
+
+        Logged-in visitors get ``hirist_seeker_enc`` and are sent from the home page to
+        /jobfeed; logged-out ones get neither. The header is rendered by React after the
+        HTML loads, so the selector check waits a few seconds for it.
+        """
+        if "/login" in (page.url or ""):
+            return False
+        names = await cookie_names(page.context, BASE)
+        if "hirist_seeker_enc" in names:
+            return True
+        if urlsplit(page.url or "").path.startswith("/jobfeed"):
+            return True
 
         try:
             profile_btn = await first_visible(page, [
@@ -287,7 +293,7 @@ class HiristAdapter(PlatformAdapter):
                 "a:has-text('Profile')",
                 "a:has-text('Logout')",
                 "button:has-text('Logout')",
-            ])
+            ], timeout_ms=6_000)
             return profile_btn is not None
         except Exception:
             return False
