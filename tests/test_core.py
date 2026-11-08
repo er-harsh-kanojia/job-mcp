@@ -280,6 +280,14 @@ class TestAutofill(unittest.TestCase):
             "open_to_work_conditions": "No", "background_declarations": "No", "consent": "Yes"}}}
         self.assertEqual([ask(q, custom) for q in questions], ["No", "Yes", "No", "No", "No", "Yes"])
 
+    def test_visa_answer_can_follow_the_job(self):
+        prof = {**self.p, "autofill": {**self.p["autofill"], "standard_answers": {
+            **self.p["autofill"]["standard_answers"], "needs_visa_sponsorship": "if_job_sponsors"}}}
+        q = "Will you require visa sponsorship?"
+        self.assertEqual(answer_question(q, prof, job={"visa_sponsored": True}), "Yes")
+        self.assertEqual(answer_question(q, prof, job={"visa_sponsored": False}), "No")
+        self.assertIsNone(answer_question(q, prof))  # job unknown: left for the Answers page
+
 
 class TestParsers(unittest.TestCase):
     def test_naukri_api_job(self):

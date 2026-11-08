@@ -216,12 +216,27 @@ def _standard(af: dict, key: str) -> str | None:
     return value or None
 
 
+# needs_visa_sponsorship = "if_job_sponsors": "Yes" for jobs marked as offering visa
+# sponsorship, "No" for the rest. Without the job at hand the question is left unanswered.
+PER_JOB_VISA = {"if_job_sponsors", "if job sponsors", "depends_on_job"}
+
+
+def _visa_answer(af: dict, job: dict | None) -> str | None:
+    value = _standard(af, "needs_visa_sponsorship")
+    if value is None or value.lower() not in PER_JOB_VISA:
+        return value
+    if job is None:
+        return None
+    return "Yes" if job.get("visa_sponsored") else "No"
+
+
 def answer_question(question: str, profile: dict, kind: str = "text",
-                    options: Iterable[str] | None = None) -> str | None:
+                    options: Iterable[str] | None = None, job: dict | None = None) -> str | None:
     """Best answer for a question, or None if we cannot answer it confidently.
 
     kind: "text" | "number" | "select" | "radio" | "checkbox" | "textarea" | "date"
     options: visible choices for select/radio/checkbox questions.
+    job: the job being applied to, for answers that depend on it (visa sponsorship).
     """
     q = _norm(question)
     if not q:
@@ -342,7 +357,7 @@ def answer_question(question: str, profile: dict, kind: str = "text",
 
     # --- yes/no defaults ----------------------------------------------------
     elif _has(q, r"sponsorship", r"\bvisa\b", r"\bh1b?\b"):
-        answer = _standard(af, "needs_visa_sponsorship")
+        answer = _visa_answer(af, job)
     elif _has(q, r"authori[sz]ed to work", r"legally (eligible|allowed|permitted)", r"right to work",
               r"eligible to work"):
         answer = _standard(af, "authorized_to_work")

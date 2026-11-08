@@ -52,7 +52,7 @@ chmod +x setup.sh start.sh
 
 Then fill in `config.json` (name, contact details, experience, notice period, expected CTC, preferred locations, and so on). These values are used to answer application forms. You can also edit them later on the Profile page.
 
-`autofill.standard_answers` holds your answers to the common yes/no questions: relocation, visa sponsorship, work authorization, office/shift/commute conditions, background declarations and consent. Nothing is assumed: a question whose answer is left empty is saved to the Answers page instead of being guessed.
+`autofill.standard_answers` holds your answers to the common yes/no questions: relocation, visa sponsorship, work authorization, office/shift/commute conditions, background declarations and consent. Nothing is assumed: a question whose answer is left empty is saved to the Answers page instead of being guessed. Set `needs_visa_sponsorship` to `if_job_sponsors` to answer "Yes" for jobs marked as offering visa sponsorship and "No" for the rest.
 
 All of your own data stays in files that git ignores: `config.json` (profile and answers), `.env` (API keys), `data/` (resume, saved answers, application history) and `.sessions/` (logins).
 

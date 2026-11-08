@@ -106,7 +106,7 @@ async def enumerate_fields(page) -> list[dict]:
 
 
 async def fill_visible_form(page, profile: dict, resume: Path | None = None,
-                            treat_unlabelled_as_required: bool = False) -> dict:
+                            treat_unlabelled_as_required: bool = False, job: dict | None = None) -> dict:
     """Fill empty visible fields. Returns {"filled": [...], "unanswered": [...]}.
 
     ``unanswered`` lists required (or, for Indeed, non-optional) questions we
@@ -129,7 +129,7 @@ async def fill_visible_form(page, profile: dict, resume: Path | None = None,
             if kind in TEXT_KINDS:
                 if (f.get("value") or "").strip():
                     continue
-                ans = answer_question(q, profile, kind="number" if kind == "number" else "text")
+                ans = answer_question(q, profile, kind="number" if kind == "number" else "text", job=job)
                 if ans is None:
                     if must:
                         unanswered.append(q or f"{kind} field")
@@ -141,7 +141,7 @@ async def fill_visible_form(page, profile: dict, resume: Path | None = None,
                 if f.get("value"):
                     continue
                 opts = [o for o in f.get("options", []) if o and not re.match(r"^(select|choose|--)", o, re.I)]
-                ans = answer_question(q, profile, kind="select", options=opts)
+                ans = answer_question(q, profile, kind="select", options=opts, job=job)
                 if ans is None:
                     if must:
                         unanswered.append(q or "select")
@@ -155,14 +155,14 @@ async def fill_visible_form(page, profile: dict, resume: Path | None = None,
                 if kind == "checkbox" and len(opts) == 1:
                     # single consent-style checkbox: the label itself is the question
                     single_q = q if q and q != opts[0] else opts[0]
-                    ans = answer_question(single_q, profile, kind="text")
+                    ans = answer_question(single_q, profile, kind="text", job=job)
                     if ans and ans.lower().startswith("y"):
                         await _check(page, f["ids"][0])
                         filled.append({"question": single_q, "answer": "checked"})
                     elif must:
                         unanswered.append(single_q)
                     continue
-                ans = answer_question(q, profile, kind="radio", options=opts)
+                ans = answer_question(q, profile, kind="radio", options=opts, job=job)
                 if ans is None or ans not in opts:
                     if must or kind == "radio":
                         unanswered.append(q or "choice")

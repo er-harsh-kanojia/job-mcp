@@ -456,7 +456,7 @@ class NaukriAdapter(PlatformAdapter):
                     return result(FAILED, f"chatbot did not accept our answer to: {question[:120]}",
                                   answers=answered)
                 continue
-            outcome = await self._answer_chat(page, question, profile)
+            outcome = await self._answer_chat(page, question, profile, job)
             if outcome is None:
                 # Keep the question for the Answers page (answer once, reused next time).
                 kind, opts = await self._current_options(page)
@@ -488,13 +488,13 @@ class NaukriAdapter(PlatformAdapter):
                 continue
         return "text", []
 
-    async def _answer_chat(self, page, question: str, profile: dict) -> str | None:
+    async def _answer_chat(self, page, question: str, profile: dict, job: dict | None = None) -> str | None:
         """Answer the current chatbot question. Returns the answer or None."""
         # Radio buttons
         radios = page.locator(CHAT_RADIO)
         if await radios.count():
             labels = [await _option_label(radios.nth(i)) for i in range(await radios.count())]
-            ans = answer_question(question, profile, kind="radio", options=labels)
+            ans = answer_question(question, profile, kind="radio", options=labels, job=job)
             i = _option_index(labels, ans)
             if i is None:
                 return None
@@ -505,7 +505,7 @@ class NaukriAdapter(PlatformAdapter):
         boxes = page.locator(CHAT_CHECKBOX)
         if await boxes.count():
             labels = [await _option_label(boxes.nth(i)) for i in range(await boxes.count())]
-            ans = answer_question(question, profile, kind="checkbox", options=labels)
+            ans = answer_question(question, profile, kind="checkbox", options=labels, job=job)
             i = _option_index(labels, ans)
             if i is None:
                 return None
@@ -518,9 +518,9 @@ class NaukriAdapter(PlatformAdapter):
         # Free-text input
         box = await first_visible(page, CHAT_INPUT)
         if box is not None:
-            ans = answer_question(question, profile, kind="text")
+            ans = answer_question(question, profile, kind="text", job=job)
             if ans is None and chip_labels:
-                ans = answer_question(question, profile, kind="chips", options=chip_labels)
+                ans = answer_question(question, profile, kind="chips", options=chip_labels, job=job)
                 i = _option_index(chip_labels, ans)
                 if i is not None:
                     await chips.nth(i).click()
@@ -534,7 +534,7 @@ class NaukriAdapter(PlatformAdapter):
             await self._send(page)
             return ans
         if chip_labels:
-            ans = answer_question(question, profile, kind="chips", options=chip_labels)
+            ans = answer_question(question, profile, kind="chips", options=chip_labels, job=job)
             i = _option_index(chip_labels, ans)
             if i is None:
                 return None
