@@ -5,10 +5,15 @@ const URL_BASE: Record<Platform, string> = {
   naukri: 'https://www.naukri.com/job-listings-',
   instahyre: 'https://www.instahyre.com/job-',
   hirist: 'https://www.hirist.tech/j/',
+  himalayas: 'https://himalayas.app/companies/acme/jobs/',
+  ycombinator: 'https://www.ycombinator.com/companies/acme/jobs/',
 };
 
-type Raw = [string, string, string, Platform, string, string, [number, number], number, boolean, number, number, string[], string, boolean?];
+type Raw = [string, string, string, Platform, string, string, [number, number], number, boolean, number, number, string[], string, boolean?, boolean?];
 const RAW: Raw[] = [
+  ['j19', 'Staff AI/ML Engineer (Visa Sponsorship & Relocation)', 'Booking.com', 'naukri', 'Amsterdam (Relocation)', '€95k–€125k', [5, 10], 1, false, 0.94, 0.92, ['Python', 'PyTorch', 'Distributed Systems', 'MLOps', 'AWS'], 'Full work visa sponsorship (EU Blue Card) and complete international relocation package provided.', false, true],
+  ['j20', 'Applied ML Scientist (Work Visa Sponsored)', 'Amazon Web Services', 'instahyre', 'London / Hybrid', '£85k–£115k', [4, 8], 2, false, 0.91, 0.89, ['Python', 'AWS', 'LLM', 'Distributed Systems', 'PyTorch'], 'Sponsors UK Skilled Worker Visa with full relocation allowance and flight support.', false, true],
+  ['j21', 'Senior Backend AI Engineer (Relocation Support)', 'Spotify', 'hirist', 'Stockholm (Relocation)', '800k–1.1M SEK', [4, 8], 0, false, 0.86, 0.85, ['Python', 'Java', 'GCP', 'Recommendations'], 'Work permit sponsorship and comprehensive relocation assistance for international engineers.', false, true],
   ['j1', 'Senior ML Engineer', 'Fractal Analytics', 'naukri', 'Bengaluru', '22–32 LPA', [4, 7], 0, true, 0.92, 0.89, ['Python', 'PyTorch', 'MLOps', 'AWS', 'LLM'], 'Own model training and deployment for retail demand forecasting, and ship to production on AWS with MLflow and SageMaker.'],
   ['j2', 'GenAI Engineer', 'Sarvam AI', 'instahyre', 'Bengaluru', '28–40 LPA', [3, 6], 0, true, 0.88, 0.87, ['LLM', 'RAG', 'LangChain', 'Python', 'Kubernetes'], 'Build retrieval and evaluation pipelines for Indic-language LLM products used by enterprise customers.'],
   ['j3', 'LLM Engineer', 'Razorpay', 'instahyre', 'Bengaluru', 'Not disclosed', [4, 8], 1, true, 0.84, 0.82, ['LLM', 'Python', 'RAG', 'Go'], 'Work on LLM-powered support automation for merchants: prompt pipelines, guardrails and offline evals.'],
@@ -30,7 +35,7 @@ const RAW: Raw[] = [
 ];
 
 export function makeJobs(): Job[] {
-  return RAW.map(([id, title, company, platform, location, salary, exp, days, easy, match, rank, skills, desc, applied]) => ({
+  return RAW.map(([id, title, company, platform, location, salary, exp, days, easy, match, rank, skills, desc, applied, visa]) => ({
     platform,
     job_id: id,
     title,
@@ -47,10 +52,12 @@ export function makeJobs(): Job[] {
     rank_score: rank,
     easy_apply: easy,
     already_applied: !!applied,
+    visa_sponsored: !!visa || /visa|sponsor|relocation|booking|amazon|spotify|revolut/i.test(title + ' ' + company + ' ' + desc),
   }));
 }
 
-export const COUNTS: Record<Platform, number> = { naukri: 42, instahyre: 29, hirist: 16 };
+// Public boards have no Easy Apply jobs in the mock (they're applied to on the site).
+export const COUNTS: Record<Platform, number> = { naukri: 42, instahyre: 29, hirist: 16, himalayas: 0, ycombinator: 0 };
 
 /** Failures simulated during apply. j12 succeeds on retry; j9 never does. */
 export const FAILS: Record<string, { reason: string; permanent: boolean }> = {

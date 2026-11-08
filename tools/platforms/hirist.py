@@ -61,32 +61,77 @@ _PRELOADED_JS = """() => {
 }"""
 
 _DOM_JS = r"""() => Array.from(document.querySelectorAll(
-  'div[data-test-id*="job-card"], div[class*="jobCard"], div[class*="job-card"], div.feed-item, div.job-tuple, a[href*="-job-"], div[class*="jobContainer"]'
+  '.joblist-card-v2, div[class*="joblist-card"], div[data-test-id*="job-card"], div[class*="jobCard"], div[class*="job-card"], div.feed-item, div.job-tuple'
 )).map(c => {
-  const a = c.tagName === 'A' ? c : c.querySelector('a[href*="-job"], a[href*="/j/"], a[href*="/job/"], a');
-  const t = (s) => { const e = c.querySelector(s); return e ? e.innerText.trim() : ''; };
-  const text = c.innerText || '';
+  const a = c.querySelector('a[href*="/j/"], a[href*="-job"], a[href*="/job/"]') || (c.tagName === 'A' ? c : c.closest('a') || c.querySelector('a'));
+  
+  let title = '';
+  const titleEl = c.querySelector('[data-testid="job_title"], h2, h3, [class*="jobTitle"], [class*="title"]');
+  if (titleEl) {
+    const clone = titleEl.cloneNode(true);
+    const saveIcon = clone.querySelector('.save-icon, [aria-label*="Save"]');
+    if (saveIcon) saveIcon.remove();
+    title = clone.innerText.trim();
+  } else if (a) {
+    title = a.innerText.split('\n')[0].trim();
+  }
+
+  const compEl = c.querySelector('[class*="company"], [class*="employer"], span.comp-name');
+  const company = compEl ? compEl.innerText.trim() : '';
+
+  const expEl = c.querySelector('[data-testid="job_experience"], [class*="experience"], [class*="exp"]');
+  const exp = expEl ? expEl.innerText.trim() : '';
+
+  const locEl = c.querySelector('[data-testid="job_location"], [class*="location"], [class*="loc"], span.loc');
+  const location = locEl ? locEl.innerText.trim() : '';
+
+  const salEl = c.querySelector('[data-testid="job_salary"], [class*="salary"], [class*="ctc"], span.sal');
+  const salary = salEl ? salEl.innerText.trim() : '';
+
+  const skills = Array.from(c.querySelectorAll('[data-testid^="job_tag_"], [class*="skill"], [class*="tag"], [class*="chip"]'))
+    .map(s => s.innerText.trim())
+    .filter(Boolean);
+
+  const postedEl = c.querySelector('[data-testid="date_posted"], [data-testid="date_posted_mobile"], [class*="posted"], [class*="date"], span.time');
+  const posted = postedEl ? postedEl.innerText.trim() : '';
+
+  const snipEl = c.querySelector('p:not([data-testid="job_title"]):not([data-testid="job_location"]), [class*="desc"], [class*="snippet"]');
+  const snippet = snipEl ? snipEl.innerText.trim() : '';
+
   return {
     url: a ? a.href : '',
-    title: t('h2, h3, [class*="jobTitle"], [class*="title"], strong') || (a ? a.innerText.split('\n')[0].trim() : ''),
-    company: t('[class*="company"], [class*="employer"], span.comp-name'),
-    location: t('[class*="location"], [class*="loc"], span.loc'),
-    exp: t('[class*="experience"], [class*="exp"]'),
-    salary: t('[class*="salary"], [class*="ctc"], span.sal'),
-    skills: Array.from(c.querySelectorAll('[class*="skill"], [class*="tag"], [class*="chip"]')).map(s => s.innerText.trim()).filter(Boolean),
-    snippet: t('p, [class*="desc"], [class*="snippet"]'),
-    posted: t('[class*="posted"], [class*="date"], span.time'),
-    easy: /easy apply|quick apply|apply/i.test(text),
+    title: title,
+    company: company,
+    location: location,
+    exp: exp,
+    salary: salary,
+    skills: skills,
+    snippet: snippet,
+    posted: posted,
+    easy: true,
   };
 }).filter(j => j.url && j.title)"""
 
 
-def build_search_url(keywords: list[str], location: str = "") -> str:
+def build_search_url(keywords: list[str], location: str = "", experience_years: int = -1, page: int = 1) -> str:
     q = " ".join(k.strip() for k in keywords if k.strip())
     loc = (location or "").strip()
-    url = f"{BASE}/search?query={quote_plus(q)}"
+    if q:
+        url = f"{BASE}/search/{quote_plus(q)}"
+    else:
+        url = f"{BASE}/search"
+
+    params: list[str] = []
     if loc and loc.lower() != "india":
-        url += f"&loc={quote_plus(loc)}"
+        params.append(f"loc={quote_plus(loc)}")
+    if experience_years is not None and experience_years >= 0:
+        params.append(f"minexp={max(0, experience_years - 2)}")
+        params.append(f"maxexp={experience_years + 2}")
+    if page > 1:
+        params.append(f"page={page}")
+
+    if params:
+        url += f"?{'&'.join(params)}"
     return url
 
 
@@ -158,23 +203,49 @@ def parse_feed_item(item: dict) -> dict | None:
     }
 
 
+ROLE_PREFIXES = {
+    "developer", "engineer", "lead", "architect", "senior", "junior", "intern", "manager",
+    "consultant", "analyst", "specialist", "director", "head", "associate", "programmer",
+    "qa", "sdet", "devops", "sre", "data", "software", "backend", "frontend", "fullstack"
+}
+
+
 def parse_dom_item(d: dict) -> dict | None:
-    url = d.get("url") or ""
-    title = d.get("title") or ""
+    url = (d.get("url") or "").strip()
+    title = (d.get("title") or "").strip()
     if not url or not title:
         return None
-    m = re.search(r"[-/]([0-9a-zA-Z]+)(?:\.html)?(?:[?#]|$)", url)
+
+    clean_url = url.split("?")[0].split("#")[0]
+    m = re.search(r"-(\d+)(?:[?#]|$)", url)
+    if not m:
+        m = re.search(r"[-/]([0-9a-zA-Z]+)(?:\.html)?(?:[?#]|$)", url)
     jid = m.group(1) if m else ""
+
     emin, emax = parse_experience(d.get("exp") or "")
+
+    company = (d.get("company") or "").strip()
+    if not company or company.lower() == "unknown":
+        if " - " in title:
+            parts = [p.strip() for p in title.split(" - ")]
+            first_words = {w.lower() for w in parts[0].split()}
+            if not (first_words & ROLE_PREFIXES):
+                company = parts[0]
+                if len(parts) > 1:
+                    title = " - ".join(parts[1:])
+            else:
+                company = "Hirist Recruiter"
+        else:
+            company = "Hirist Recruiter"
 
     return {
         "platform": "hirist",
         "job_id": jid,
         "title": title,
-        "company": d.get("company") or "Unknown",
+        "company": company,
         "location": d.get("location") or "",
         "salary": d.get("salary") or "Not disclosed",
-        "apply_url": url,
+        "apply_url": clean_url,
         "description": strip_html(d.get("snippet") or ""),
         "skills": d.get("skills") or [],
         "exp_min": emin,
@@ -198,13 +269,19 @@ class HiristAdapter(PlatformAdapter):
     search_requires_login = False
 
     async def is_logged_in(self, page) -> bool:
-        """Check login state using cookies and visible user profile selectors."""
-        try:
-            names = await cookie_names(page)
-            if any(k in names for k in ("auth_token", "jwt", "user_id", "sessionid", "token", "logged_in", "user_token")):
-                return True
-        except Exception as exc:
-            self.log.debug("hirist: cookie check failed: %s", exc)
+        """Check login state: the seeker session cookie first, then the page header.
+
+        Logged-in visitors get ``hirist_seeker_enc`` and are sent from the home page to
+        /jobfeed; logged-out ones get neither. The header is rendered by React after the
+        HTML loads, so the selector check waits a few seconds for it.
+        """
+        if "/login" in (page.url or ""):
+            return False
+        names = await cookie_names(page.context, BASE)
+        if "hirist_seeker_enc" in names:
+            return True
+        if urlsplit(page.url or "").path.startswith("/jobfeed"):
+            return True
 
         try:
             profile_btn = await first_visible(page, [
@@ -216,7 +293,7 @@ class HiristAdapter(PlatformAdapter):
                 "a:has-text('Profile')",
                 "a:has-text('Logout')",
                 "button:has-text('Logout')",
-            ])
+            ], timeout_ms=6_000)
             return profile_btn is not None
         except Exception:
             return False
@@ -224,42 +301,65 @@ class HiristAdapter(PlatformAdapter):
     async def search(self, keywords: list[str], location: str, experience_years: int,
                      limit: int = 40) -> list[dict]:
         """Search jobs on Hirist by loading the search results page."""
-        url = build_search_url(keywords, location)
-        self.log.info("hirist: searching via %s", url)
+        self.log.info("hirist: searching for %s (loc=%s, exp=%s, limit=%d)",
+                      keywords, location, experience_years, limit)
         out: list[dict] = []
+        seen_urls: set[str] = set()
+
+        max_pages = max(1, (limit + 19) // 20)
+        max_pages = min(max_pages, 3)
 
         async with self.browser() as ctx:
             page = await ctx.new_page()
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-                await wait_for_human_challenge(page, self.name)
-                await human_pause(1.0, 2.0)
+                for pno in range(1, max_pages + 1):
+                    url = build_search_url(keywords, location, experience_years, page=pno)
+                    self.log.info("hirist: navigating to page %d: %s", pno, url)
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+                    except Exception as e:
+                        self.log.warning("hirist: goto %s failed: %s", url, e)
+                        break
 
-                # 1. Try extracting from window.__PRELOADED_STATE__
-                try:
-                    feed_items = await page.evaluate(_PRELOADED_JS)
-                    if feed_items and isinstance(feed_items, list):
-                        for it in feed_items:
-                            rec = parse_feed_item(it)
-                            if rec and rec["apply_url"]:
-                                out.append(rec)
-                                if len(out) >= limit:
-                                    break
-                except Exception as exc:
-                    self.log.debug("hirist: preloaded state eval failed: %s", exc)
+                    await wait_for_human_challenge(page, self.name)
+                    try:
+                        await page.wait_for_selector('.joblist-card-v2, a[href*="/j/"]', timeout=8_000)
+                    except Exception:
+                        pass
+                    await human_pause(0.5, 1.2)
 
-                # 2. Fallback to DOM parsing if state was empty
-                if not out:
-                    await human_scroll(page, steps=3, distance=500)
-                    await asyncio.sleep(1.0)
-                    cards = await page.evaluate(_DOM_JS)
-                    if cards and isinstance(cards, list):
-                        for c in cards:
-                            rec = parse_dom_item(c)
-                            if rec and rec["apply_url"]:
-                                out.append(rec)
-                                if len(out) >= limit:
-                                    break
+                    # 1. Try extracting from window.__PRELOADED_STATE__ if available
+                    try:
+                        feed_items = await page.evaluate(_PRELOADED_JS)
+                        if feed_items and isinstance(feed_items, list):
+                            for it in feed_items:
+                                rec = parse_feed_item(it)
+                                if rec and rec["apply_url"] and rec["apply_url"] not in seen_urls:
+                                    seen_urls.add(rec["apply_url"])
+                                    out.append(rec)
+                                    if len(out) >= limit:
+                                        break
+                    except Exception as exc:
+                        self.log.debug("hirist: preloaded state eval failed: %s", exc)
+
+                    # 2. Extract from DOM cards
+                    if len(out) < limit:
+                        cards = await page.evaluate(_DOM_JS)
+                        if cards and isinstance(cards, list):
+                            new_in_page = 0
+                            for c in cards:
+                                rec = parse_dom_item(c)
+                                if rec and rec["apply_url"] and rec["apply_url"] not in seen_urls:
+                                    seen_urls.add(rec["apply_url"])
+                                    out.append(rec)
+                                    new_in_page += 1
+                                    if len(out) >= limit:
+                                        break
+                            if new_in_page == 0:
+                                break
+
+                    if len(out) >= limit:
+                        break
             finally:
                 try:
                     await page.close()

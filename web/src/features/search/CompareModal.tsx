@@ -17,6 +17,7 @@ export function CompareModal({ jobs, mine, onClose, onApply }: { jobs: Job[]; mi
     F('Experience', (j) => expLabel(j.exp_min, j.exp_max)),
     F('Posted', (j) => postedLabel(j.posted_days_ago)),
     F('Apply type', (j) => (j.easy_apply ? 'Easy Apply' : 'External site')),
+    F('Visa sponsorship', (j) => (j.visa_sponsored ? '🌍 Yes (Sponsored)' : 'Not specified')),
     F('Match score', (j) => j.match_score.toFixed(2), (j) => j.match_score === bestMatch),
     F('Rank score', (j) => j.rank_score.toFixed(2)),
     F('Skills matched', (j) => `${j.skills.filter((k) => skillMatches(k, mine)).length} of ${j.skills.length}`),

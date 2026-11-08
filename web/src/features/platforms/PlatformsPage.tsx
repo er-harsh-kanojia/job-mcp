@@ -15,8 +15,13 @@ const DESC: Record<string, string> = {
   indeed: 'Planned. Direct search and Indeed Apply integration.',
   linkedin: 'Planned. Search and Easy Apply support are in progress.',
   wellfound: 'Planned. Startup roles with salary and equity ranges.',
+  himalayas: 'Remote jobs you can take from your country, with salary ranges. Searched without an account.',
+  ycombinator: 'Jobs at Y Combinator startups, with salary, equity and visa sponsorship. Searched without an account.',
+  welcometothejungle: 'Planned. Needs a Welcome to the Jungle account even to search.',
+  hiringcafe: 'Planned. Its site sits behind a Cloudflare check that blocks automated search.',
 };
 const DOMAINS: Record<string, string> = { naukri: 'naukri.com/nlogin', instahyre: 'instahyre.com/login', hirist: 'hirist.tech/login' };
+const HOMES: Record<string, string> = { himalayas: 'https://himalayas.app/jobs', ycombinator: 'https://www.ycombinator.com/jobs' };
 
 export function PlatformsPage() {
   const q = usePlatforms();
@@ -98,6 +103,26 @@ function PlatformCard({ p, down, checking, onCheck }: { p: PlatformInfo; down: b
             Coming soon
           </button>
         </div>
+      </article>
+    );
+  }
+  if (p.login_required === false) {
+    return (
+      <article className="card pcard">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <PlatformBadge id={p.id} name={p.name} large />
+          <span className="pill st-applied">Ready</span>
+        </div>
+        <p>{DESC[String(p.id)] ?? `Searches ${p.name}.`}</p>
+        <div className="help">No login needed · you apply on the site with “Apply on site”</div>
+        {HOMES[String(p.id)] && (
+          <div style={{ marginTop: 'auto' }}>
+            <a className="btn" href={HOMES[String(p.id)]} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" small />
+              Open {p.name}
+            </a>
+          </div>
+        )}
       </article>
     );
   }

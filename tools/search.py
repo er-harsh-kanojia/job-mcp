@@ -192,7 +192,8 @@ def is_company_excluded(company: str | None, excluded_companies: Iterable[str] |
 
 def filter_jobs(jobs: list[dict], min_match_score: float = 0.25,
                 experience_years: int | None = None,
-                exclude_companies: list[str] | None = None) -> list[dict]:
+                exclude_companies: list[str] | None = None,
+                visa_sponsored_only: bool = False) -> list[dict]:
     """Drop low matches, clearly experience-incompatible jobs, and excluded companies; sort by rank_score."""
     if experience_years is None:
         experience_years = get_experience_years()
@@ -201,7 +202,8 @@ def filter_jobs(jobs: list[dict], min_match_score: float = 0.25,
     kept = [j for j in (jobs or [])
             if float(j.get("match_score") or 0) >= min_match_score
             and not experience_incompatible(j, experience_years)
-            and not is_company_excluded(j.get("company"), exclude_companies)]
+            and not is_company_excluded(j.get("company"), exclude_companies)
+            and (not visa_sponsored_only or bool(j.get("visa_sponsored")))]
     kept = dedupe_jobs(kept)
     kept.sort(key=lambda j: (float(j.get("rank_score") or 0), float(j.get("match_score") or 0)),
               reverse=True)

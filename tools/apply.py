@@ -87,8 +87,12 @@ def _brief(job: dict, **extra) -> dict:
 
 async def bulk_apply(jobs: list[dict], max_applications: int = 20, dry_run: bool = True,
                      delay_range: tuple[float, float] | None = None,
-                     on_job: JobCallback | None = None, cancel_event=None) -> dict:
+                     on_job: JobCallback | None = None, cancel_event=None,
+                     human_wait: int | None = None) -> dict:
     """Apply to up to ``max_applications`` jobs (in the given order).
+
+    ``human_wait``: seconds to wait for you to answer a question the bot can't
+    (None = the platform default; 0 = unattended: save it for the Answers page and skip).
 
     * skips jobs already recorded as applied, and non easy-apply jobs
     * groups by platform and reuses one browser context per platform
@@ -183,6 +187,7 @@ async def bulk_apply(jobs: list[dict], max_applications: int = 20, dry_run: bool
         try:
             async with open_context(platform) as ctx:
                 adapter = get_adapter(platform, context=ctx)
+                adapter.human_wait = human_wait
                 page = await new_page(ctx)
                 logged_in = False
                 try:

@@ -18,7 +18,7 @@ from tools import tracker
 from tools.ai import providers
 from tools.browser import has_session, mark_logged_in, session_info
 from tools.config import ROOT_DIR, get_excluded_companies, get_experience_years
-from tools.platforms import PLANNED_PLATFORMS, SUPPORTED_PLATFORMS
+from tools.platforms import PLANNED_PLATFORMS, SUPPORTED_PLATFORMS, get_adapter_class
 
 from . import VERSION, browser_thread
 from .errors import ApiError, not_found
@@ -29,7 +29,9 @@ log = logging.getLogger("job_mcp.api")
 router = APIRouter(prefix="/api")
 
 PLATFORM_NAMES = {"naukri": "Naukri", "instahyre": "Instahyre", "indeed": "Indeed",
-                  "linkedin": "LinkedIn", "wellfound": "Wellfound", "hirist": "Hirist"}
+                  "linkedin": "LinkedIn", "wellfound": "Wellfound", "hirist": "Hirist",
+                  "himalayas": "Himalayas", "ycombinator": "YC Jobs",
+                  "welcometothejungle": "Welcome to the Jungle", "hiringcafe": "HiringCafe"}
 _last_checked: dict[str, str] = {}
 _mcp_tool_count: int | None = None
 
@@ -71,8 +73,20 @@ async def browser_diagnostics():
 
 # ---------------------------------------------------------------- platforms
 
+def login_required(pid: str) -> bool:
+    """False for public boards (searched without an account; applied to on the site)."""
+    try:
+        return bool(get_adapter_class(pid).login_required)
+    except Exception:
+        return True
+
+
 def platform_obj(pid: str) -> dict:
     live = pid in SUPPORTED_PLATFORMS
+    if live and not login_required(pid):
+        # Always ready: nothing to log in to.
+        return {"id": pid, "name": PLATFORM_NAMES.get(pid, pid.title()), "live": True,
+                "session": "logged_in", "login_required": False, "last_checked": None}
     info = session_info(pid) if live else {}
     if not live:
         session = "not_set_up"
@@ -84,7 +98,7 @@ def platform_obj(pid: str) -> dict:
         session = "not_set_up"
     last = _last_checked.get(pid) or to_local(info.get("logged_in_at"))
     return {"id": pid, "name": PLATFORM_NAMES.get(pid, pid.title()), "live": live,
-            "session": session, "last_checked": last}
+            "session": session, "login_required": True, "last_checked": last}
 
 
 def _live_platform(pid: str) -> str:
@@ -104,6 +118,8 @@ async def platforms():
 @router.post("/platforms/{pid}/check")
 async def check_platform(pid: str):
     pid = _live_platform(pid)
+    if not login_required(pid):
+        return platform_obj(pid)
     res = await browser_thread.run(lambda: session_mod.check_login(pid, headless=True))
     _last_checked[pid] = _now_local()
     if res.get("logged_in") and not has_session(pid):
@@ -122,6 +138,8 @@ class LoginBody(BaseModel):
 @router.post("/platforms/{pid}/login")
 async def login_platform(pid: str, body: LoginBody | None = None):
     pid = _live_platform(pid)
+    if not login_required(pid):
+        raise ApiError(400, "no_login_needed", f"{PLATFORM_NAMES.get(pid, pid)} doesn't need a login.")
     timeout = (body or LoginBody()).timeout_seconds
 
     async def run(task: Task):
@@ -190,6 +208,7 @@ class SearchBody(BaseModel):
     limit_per_platform: int | None = Field(None, ge=1, le=200)
     max_jobs: int | None = Field(50, ge=1, le=1000)
     exclude_companies: list[str] | None = None
+    visa_sponsored_only: bool = False
 
 
 @router.post("/search")
@@ -206,7 +225,7 @@ async def start_search(body: SearchBody):
     exclude_comps = [c.strip() for c in body.exclude_companies if c and c.strip()] if body.exclude_companies is not None else get_excluded_companies()
     params = {"keywords": keywords, "location": body.location, "experience_years": exp,
               "platforms": wanted, "min_match_score": body.min_match_score, "max_jobs": body.max_jobs,
-              "exclude_companies": exclude_comps}
+              "exclude_companies": exclude_comps, "visa_sponsored_only": body.visa_sponsored_only}
 
     async def run(task: Task):
         state: dict[str, dict] = {}       # platform -> aggregated status
@@ -286,7 +305,8 @@ async def start_search(body: SearchBody):
         if body.max_jobs is not None:
             all_jobs = all_jobs[:body.max_jobs]
         filtered = search_mod.filter_jobs(all_jobs, min_match_score=body.min_match_score, experience_years=exp,
-                                          exclude_companies=exclude_comps)
+                                          exclude_companies=exclude_comps,
+                                          visa_sponsored_only=body.visa_sponsored_only)
         finals = [st.get("final") or {"platform": p, "state": st["state"], "count": st["count"]}
                   for p, st in state.items()]
         tracker.save_search_run(params, finals, filtered, all_jobs)
@@ -341,7 +361,7 @@ async def apply_preview(body: PreviewBody):
             will_skip.append({"job": pj, "reason": "not_easy_apply"})
         elif search_mod.is_company_excluded(j.get("company"), ex_comps):
             will_skip.append({"job": pj, "reason": "excluded_company"})
-        elif platform in SUPPORTED_PLATFORMS and not has_session(platform):
+        elif platform in SUPPORTED_PLATFORMS and login_required(platform) and not has_session(platform):
             will_skip.append({"job": pj, "reason": "session_expired"})
         elif len(will_apply) >= body.max_applications:
             will_skip.append({"job": pj, "reason": "over_limit"})
@@ -385,6 +405,31 @@ async def start_apply(body: ApplyBody):
     task = manager.start("apply", run)
     task.meta = {"dry_run": body.dry_run, "requested": len(body.apply_urls)}
     return {"task_id": task.id}
+
+
+class ExternalApplyBody(BaseModel):
+    apply_url: str
+    title: str | None = None
+    company: str | None = None
+    platform: str | None = None
+    location: str | None = None
+
+
+@router.post("/apply/external")
+def record_external_apply(body: ExternalApplyBody):
+    url = (body.apply_url or "").strip()
+    if not url:
+        raise ApiError(400, "missing_url", "apply_url is required.")
+    tracker.record(
+        apply_url=url,
+        title=body.title or "",
+        company=body.company or "",
+        platform=body.platform or "external",
+        location=body.location or "",
+        status="applied",
+        error="Applied externally on employer site",
+    )
+    return {"ok": True, "apply_url": url, "status": "applied"}
 
 
 # ------------------------------------------------------------- applications

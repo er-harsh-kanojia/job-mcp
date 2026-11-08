@@ -1,210 +1,145 @@
 # Job MCP
 
-Search and apply to jobs on **Naukri**, **Instahyre**, and **Hirist (hirist.tech)** from one unified interface:
-- **Local Web UI** (`app.py` / `start.bat`) running at [http://127.0.0.1:8765](http://127.0.0.1:8765)
-- **Interactive CLI** (`run.py`)
-- **MCP Server** (`server.py`) for Claude Desktop and Claude Code
+A local tool for searching and applying to jobs on Indian job portals and a few remote job boards. It runs on your own machine and drives a real browser with your own logged-in sessions.
 
-The web UI also includes an AI **Resume and prep** suite:
-- **Resume Review & ATS Scoring**: In-depth review scored on accuracy, ATS compatibility, role fit, and impact.
-- **Skill Demand Analysis**: Aggregated from real live job listings.
-- **2-Week Prep Plan**: Structured roadmap tailored to your target role.
-- **Interactive Mock Interviews**: Real-time mock interview sessions with immediate AI feedback.
+You can use it three ways:
 
----
+- a web app at http://127.0.0.1:8765 (`app.py`, or `start.bat` on Windows)
+- a small interactive CLI (`run.py`)
+- an MCP server for Claude Desktop and Claude Code (`server.py`)
 
-## ⚡ Quick Start / One-Command Setup
+## What it does
 
-You can run setup in **one command**—either directly yourself or by telling **Claude Code / Cursor / Any AI Assistant**:
+- Searches several portals at once and ranks the results against your profile (title, skills, experience, location). Filters for minimum match score, excluded companies and visa sponsorship.
+- Bulk applies to the jobs you select. Every run can be a dry run first: it fills the forms but stops before the final submit.
+- Autopilot: runs a search and apply on a schedule (by default 09:30 and 18:30), with a daily limit per platform. It starts switched off and in dry-run mode.
+- Answers: when an application asks something the bot doesn't know, the question is saved on the Answers page. Answer it once and it is reused on every later job that asks the same thing.
+- Applications tracker with history and stats, stored in a local SQLite file.
+- Resume and prep (optional, needs an AI API key): resume review and ATS score, skill demand from live listings, a two-week prep plan and mock interviews.
 
-> *"Run setup.bat to set up everything automatically."*
+## Supported sites
 
-### On Windows (CMD / PowerShell / Double-click)
+| Site | Login | Search | Apply |
+| --- | --- | --- | --- |
+| Naukri | your account | yes | automatic |
+| Instahyre | your account | yes | automatic |
+| Hirist | your account | yes | automatic |
+| Himalayas | not needed | yes | on the site ("Apply on site") |
+| YC job board | not needed | yes | on the site ("Apply on site") |
 
-Run `setup.bat` or run in PowerShell:
+Planned: LinkedIn, Wellfound, Indeed, Welcome to the Jungle (needs an account even to search) and HiringCafe (blocks automated access).
+
+"Apply on site" opens the job in a new tab and marks it as applied in the tracker. Jobs that are only applied to on the employer's site are skipped by bulk apply and autopilot.
+
+## Setup
+
+You need Python 3.10 or newer and Node.js. The setup script checks both (on Windows it can install them with winget), creates `.venv`, installs the Python packages and Playwright's Chromium, builds the web app, and creates `.env` and `config.json` from their templates.
+
+Windows:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
-*(Or simply double-click `setup.bat` in File Explorer).*
 
-### On Linux / macOS / Git Bash
+or double-click `setup.bat`.
+
+Linux, macOS or Git Bash:
 
 ```bash
 chmod +x setup.sh start.sh
 ./setup.sh
 ```
 
-### What the Setup Script Automates:
-1. **Python Check**: Verifies Python 3.10+ is installed (automatically installs Python 3.12 via `winget` if missing on Windows).
-2. **Node.js & npm Check**: Verifies Node.js & npm are present (automatically installs Node.js LTS via `winget` if missing).
-3. **Virtual Environment**: Creates `.venv` if not already present.
-4. **Python Dependencies**: Upgrades `pip` and installs all packages from `requirements.txt`.
-5. **Playwright Chromium**: Downloads the Chromium browser for scraping and applications.
-6. **Frontend Build**: Runs `npm install` and `npm run build` in `web/` to produce the production bundle.
-7. **Config & Environment**: Generates `.env` from `.env.example` and `config.json` from `config.example.json` if they don't exist yet.
+Then fill in `config.json` (name, contact details, experience, notice period, expected CTC, preferred locations, and so on). These values are used to answer application forms. You can also edit them later on the Profile page.
 
----
+### AI features (optional)
 
-## 🔑 AI Resume & Prep Setup (Adding Your API Key)
-
-> [!IMPORTANT]
-> **API Key Required for AI Features**:
-> Core job searching and automated applications (Naukri, Instahyre, Hirist) work **completely free without any AI keys**.
->
-> However, to use the AI **Resume Review**, **ATS Scorer**, and **Mock Interview** features, you must provide your own API key in `.env`.
-
-### 1. Create your `.env` file
-If not created automatically by `setup.bat`, copy the template:
-```bash
-# Windows
-copy .env.example .env
-
-# Linux / Mac / PowerShell
-cp .env.example .env
-```
-
-### 2. Add your Anthropic or OpenAI API Key
-Open `.env` in any text editor and paste your key:
+Searching and applying work without any API key. The resume review, ATS score, prep plan and mock interviews need one key in `.env`:
 
 ```ini
-# Claude (Anthropic): https://console.anthropic.com/settings/keys
-ANTHROPIC_API_KEY=sk-ant-api03-...
-
-# OR ChatGPT (OpenAI): https://platform.openai.com/api-keys
-OPENAI_API_KEY=sk-proj-...
+ANTHROPIC_API_KEY=...
+# or
+OPENAI_API_KEY=...
 ```
 
-- You need **at least one** key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`).
-- If you provide both, you can toggle between Claude and OpenAI directly inside the Web UI (**Profile > AI Provider**).
-- Restart the app after editing `.env`. Keys are read only locally on your machine and are never sent anywhere else.
+With both set, you can switch providers under Profile > AI provider. Restart the app after editing `.env`.
 
----
+## Running
 
-## 🚀 Running the Web UI
-
-### Option 1: Double-click `start.bat`
 ```bash
-.\start.bat
-```
-
-### Option 2: Run via Python directly
-```bash
+start.bat
+# or
 .\.venv\Scripts\python.exe app.py
 ```
-*(On Linux/Mac: `./.venv/bin/python app.py` or `./start.sh`)*
 
-- Opens automatically in your default browser at: **[http://127.0.0.1:8765](http://127.0.0.1:8765)**
-- To stop the server, press `Ctrl + C` in the terminal window.
+On Linux or macOS use `./start.sh` or `./.venv/bin/python app.py`. The app opens in your browser at http://127.0.0.1:8765. Stop it with Ctrl+C.
 
----
+A typical first run:
 
-## 🖥️ Using the Interactive CLI
+1. Open Platforms and log in to Naukri, Instahyre and Hirist. A browser window opens and you sign in yourself, including any OTP. The session is saved under `.sessions/` and reused.
+2. Run a search, select jobs and start a bulk apply in dry-run mode. Check the results, then switch to live mode.
+3. Optional: turn on Autopilot once a dry run looks right.
+
+Autopilot only runs while the app is running, so your computer needs to be on at the scheduled times. A slot that was missed by up to three hours still runs.
+
+## CLI
 
 ```bash
 .\.venv\Scripts\python.exe run.py
 ```
 
-1. **Login**: Opens a visible browser window for one platform. Sign in manually once; your session cookies are stored securely under `.sessions/<platform>` and reused for future runs. Passwords are never typed or stored by code.
-2. **Search & Apply**: Always starts in **Dry Run** mode first. A dry run navigates forms and fills details, but **never clicks the final submit button**, allowing you to inspect results safely.
-3. **Status**: Shows your application history and statistics from `data/applications.db`.
-4. **Search only**: Search and rank jobs across platforms without applying.
+The menu has: log in to a platform, search and apply (starts with a dry run), application status, and search only.
 
----
+## MCP server
 
-## 🤖 Register with Claude (MCP Server)
+Claude Code:
 
-Job MCP provides a full **Model Context Protocol (MCP)** server for Claude Desktop and Claude Code.
-
-### Claude Code CLI:
 ```bash
-claude mcp add job-mcp -- D:\Job-MCP\.venv\Scripts\python.exe D:\Job-MCP\server.py
+claude mcp add job-mcp -- <path-to-repo>\.venv\Scripts\python.exe <path-to-repo>\server.py
 ```
 
-### Claude Desktop
-Add to your `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac):
+Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "job-mcp": {
-      "command": "D:\\Job-MCP\\.venv\\Scripts\\python.exe",
-      "args": ["D:\\Job-MCP\\server.py"]
+      "command": "<path-to-repo>\\.venv\\Scripts\\python.exe",
+      "args": ["<path-to-repo>\\server.py"]
     }
   }
 }
 ```
 
-### Available MCP Tools:
-- `list_platforms`: Check active and planned platforms and login status.
-- `login_platform`: Launch interactive login in a visible browser.
-- `search_jobs`: Search and rank jobs with match score, profile comparison, and `exclude_companies` filter.
-- `apply_to_jobs`: Automated application with safe dry-run mode (skips excluded companies).
-- `application_status`: View application history and tracker stats.
-- `review_resume`: Extract resume details and run ATS review.
-- `interview_prep`: Generate interview questions and prep roadmap.
+Tools: `list_platforms`, `login_platform`, `search_jobs`, `apply_to_jobs`, `application_status`, `review_resume`, `interview_prep`.
 
----
+## Excluding companies
 
-## 🚫 Company Exclusion (Blacklist)
+Add company names in the Exclude filter on the Search page for one search, or under Excluded companies on the Profile page to keep them excluded. Jobs from those companies are hidden and never applied to. The API and the `search_jobs` tool accept `exclude_companies` too.
 
-Want to skip specific companies (e.g. WITCH companies or current employers)?
-Job MCP lets you exclude companies seamlessly across the platform:
-
-1. **In the Web UI (Search Page)**:
-   - Type any company name (e.g., `TCS`, `Infosys`, `Wipro`) in the **Exclude** filter and hit **Enter**.
-   - Matching jobs are immediately filtered out in real time and excluded from all automated applications.
-   - Click `✕` on any chip to remove the exclusion anytime.
-2. **In Profile Settings (`/profile`)**:
-   - Add permanent excluded companies under **Excluded companies** and click **Save profile**.
-   - They are saved to `config.json` under `"excluded_companies": [...]` and automatically apply to future searches.
-3. **In MCP & REST API**:
-   - Pass `"exclude_companies": ["TCS", "Infosys"]` in `/api/search` or to the `search_jobs` MCP tool.
-   - Jobs from excluded companies are automatically marked as `excluded_company` and skipped during bulk apply.
-
----
-
-## 🌐 Platform Support Matrix
-
-| Platform | Status | Features |
-| :--- | :--- | :--- |
-| **Naukri** | ✅ **Active / Live** | Search, Profile matching, One-click Apply |
-| **Instahyre** | ✅ **Active / Live** | Search API, Profile matching, One-click Apply |
-| **Hirist** | ✅ **Active / Live** | Tech search, Preloaded state parsing, Direct Apply |
-| **Indeed** | ⏳ *Planned (Upcoming)* | External and Indeed Apply flow integration |
-| **LinkedIn** | ⏳ *Planned (Upcoming)* | Easy Apply and search integration |
-| **Wellfound** | ⏳ *Planned (Upcoming)* | Startup roles with salary & equity filtering |
-
----
-
-## 📁 Project Structure
+## Project layout
 
 ```
-Job-MCP/
-├── setup.bat          # 1-click Windows setup launcher (checks Python, npm, installs all)
-├── setup.ps1          # PowerShell automated setup script
-├── setup.sh           # Bash automated setup script (Linux / Mac)
-├── start.bat          # Launch Web UI on Windows (http://127.0.0.1:8765)
-├── start.sh           # Launch Web UI on Linux / Mac
-├── app.py             # FastAPI + Uvicorn server launcher
-├── run.py             # Interactive CLI application
-├── server.py          # Model Context Protocol (MCP) server
-├── requirements.txt   # Python dependencies
-├── .env.example       # Template for Anthropic & OpenAI API keys
-├── config.example.json# Template for user profile & autofill preferences
-├── api/               # REST API endpoints & background task runners
-├── web/               # Modern React + Vite + Tailwind frontend
-├── tools/             # Core business logic:
-│   ├── platforms/     # Adapters: naukri.py, instahyre.py, hirist.py, indeed.py
-│   ├── ai/            # Resume review, ATS scorer, mock interview logic
-│   ├── browser.py     # Playwright session management & human pauses
-│   ├── tracker.py     # SQLite tracker for jobs and applications
-│   └── search.py      # Multi-platform aggregated search & ranking
-└── tests/             # Comprehensive unit & integration tests
+api/            FastAPI routes and background tasks (search, apply, login, autopilot)
+web/            React + Vite front end
+tools/
+  platforms/    one adapter per site (naukri, instahyre, hirist, himalayas, ycombinator)
+  ai/           resume review, demand analysis, prep plan, mock interviews
+  autofill.py   answers to application questions from your profile
+  answers.py    saved answers and questions waiting for you
+  autopilot.py  schedule, daily limits and job selection
+  browser.py    Playwright sessions
+  scoring.py    match and rank scores
+  search.py     search across platforms
+  tracker.py    SQLite store for jobs and applications
+tests/          unit and API tests (python -m unittest discover -s tests -t .)
+app.py          web app launcher
+run.py          CLI
+server.py       MCP server
 ```
 
----
+## Privacy
 
-## 🔒 Security & Privacy Notice
-- **Passwords are NEVER stored**: You log in manually in a real browser window. Job MCP only stores session cookies in the local `.sessions/` directory.
-- **Dry-run by default**: Bulk apply always starts in dry-run mode so you can verify each application before committing.
-- **Local only**: The server binds to `127.0.0.1` only. Your resume, profile, and application history stay on your local disk.
+- You log in yourself in a real browser window; the app keeps only the session cookies in `.sessions/`. It never types or uses a password. `config.json` has credential fields, but only the e-mail is used, to prefill the login form.
+- `config.json`, `.env`, `.sessions/` and `data/` are in `.gitignore`. Keep your profile, keys and application history out of commits.
+- The server listens on 127.0.0.1 only. Nothing is sent anywhere except to the job sites you use and, if you set a key, the AI provider for the resume and prep features.

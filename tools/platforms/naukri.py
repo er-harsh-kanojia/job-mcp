@@ -20,6 +20,7 @@ import re
 import time
 from urllib.parse import parse_qs, quote, urlsplit
 
+from .. import answers
 from ..autofill import answer_question
 from ..browser import (cookie_names, first_visible, human_pause, human_scroll,
                        safe_inner_text)
@@ -103,6 +104,8 @@ EXPIRED_RE = re.compile(r"no longer (accepting|available)|job (has )?expired|thi
 CHAT_DRAWER = [".chatbot_DrawerContentWrapper", "[class*='chatbot_Drawer']",
                "[class*='chatbot_MessageContainer']", "div[id*='_chatbot']"]
 CHAT_BOT_MSG = ".botMsg, li.botItem, [class*='botItem'], [class*='botMsg']"
+# Your own replies in the chat (what you typed or picked).
+CHAT_USER_MSG = "li.userItem .userMsg, .userMsg, li.userItem"
 CHAT_RADIO = ".ssrc__radio-btn-container, [class*='radio-btn-container']"
 CHAT_CHECKBOX = ".mcc__checkbox-container, [class*='mcc__checkbox'], [class*='checkbox-container']"
 CHAT_CHIP = ".chatbot_Chip, [class*='chatbot_Chip'], [class*='chipItem']"
@@ -358,7 +361,7 @@ class NaukriAdapter(PlatformAdapter):
         except Exception:
             pass
 
-        return await self._post_apply(page, profile)
+        return await self._post_apply(page, profile, job)
 
     async def _dump_debug(self, page, tag: str) -> str:
         """Save a screenshot and the HTML of the current page to data/debug/ for diagnosis."""
@@ -374,23 +377,42 @@ class NaukriAdapter(PlatformAdapter):
             log.warning("naukri: debug capture failed: %s", exc)
             return ""
 
-    async def _post_apply(self, page, profile) -> dict:
+    async def _remember_your_answer(self, page, question: str, answered: list) -> None:
+        """Save what you typed/picked for ``question`` (your last chat message) to the answer bank."""
+        try:
+            mine = page.locator(CHAT_USER_MSG)
+            n = await mine.count()
+            text = (await safe_inner_text(mine.nth(n - 1))).strip() if n else ""
+        except Exception:
+            text = ""
+        if text:
+            saved = answers.save(question, text, source="you")
+            if saved:
+                log.info("naukri: saved your answer to '%s' for next time", question[:80])
+        answered.append({"question": question[:150], "answer": text or "(answered by you in the browser)"})
+
+    async def _post_apply(self, page, profile, job: dict | None = None) -> dict:
         start = time.monotonic()
         deadline = start + 150
         last_q, repeats, answered = None, 0, []
         seen_drawer = False
         human_q, human_until = None, 0.0
+        wait = HUMAN_WAIT if self.human_wait is None else max(0, int(self.human_wait))
         while time.monotonic() < deadline:
             await asyncio.sleep(1.5)
             saved = save_apply_outcome(page.url)
             if saved is not None:
                 ok, codes = saved
+                if human_q is not None:
+                    await self._remember_your_answer(page, human_q, answered)
                 if ok:
                     return result(APPLIED, "applied", answers=answered)
                 return result(FAILED, f"Naukri rejected the application (response {codes})",
                               answers=answered)
             body = await safe_inner_text(page.locator("body"))
             if SUCCESS_RE.search(body) or await first_visible(page, [".apply-status-header", "#already-applied"]):
+                if human_q is not None:
+                    await self._remember_your_answer(page, human_q, answered)
                 return result(APPLIED, "applied", answers=answered)
             if "naukri.com" not in page.url:
                 return result(SKIPPED, f"redirected off Naukri ({page.url[:80]})", easy_apply=False)
@@ -421,12 +443,12 @@ class NaukriAdapter(PlatformAdapter):
                 if question == human_q:
                     if time.monotonic() > human_until:
                         await self._dump_debug(page, "unanswered-question")
-                        return result(FAILED, f"no answer within {HUMAN_WAIT}s to: {question[:150]} "
-                                      "(answer it in the browser, or add details to your profile)",
+                        return result(FAILED, f"no answer within {wait}s to: {question[:150]} "
+                                      "(saved on the Answers page: answer it there once)",
                                       answers=answered)
                     continue
-                answered.append({"question": human_q[:150], "answer": "(answered by you in the browser)"})
                 log.info("naukri: you answered '%s'; continuing", human_q[:80])
+                await self._remember_your_answer(page, human_q, answered)
                 human_q, last_q, repeats = None, None, 0
             if question == last_q:
                 repeats += 1
@@ -436,16 +458,35 @@ class NaukriAdapter(PlatformAdapter):
                 continue
             outcome = await self._answer_chat(page, question, profile)
             if outcome is None:
+                # Keep the question for the Answers page (answer once, reused next time).
+                kind, opts = await self._current_options(page)
+                answers.add_pending(question, kind=kind, options=opts, job=job)
+                if wait <= 0:
+                    return result(FAILED, f"needs your answer: {question[:150]} "
+                                  "(saved on the Answers page; it's answered automatically next time)",
+                                  answers=answered)
                 # Leave it for the person: they can type the answer in the open browser window.
                 log.warning("naukri: waiting up to %ds for you to answer in the browser: %s",
-                            HUMAN_WAIT, question[:150])
-                human_q, human_until = question, time.monotonic() + HUMAN_WAIT
+                            wait, question[:150])
+                human_q, human_until = question, time.monotonic() + wait
                 deadline = max(deadline, human_until + 60)
                 continue
             answered.append({"question": question[:150], "answer": outcome})
             last_q, repeats = question, 0
         await self._dump_debug(page, "timeout")
         return result(FAILED, "timed out waiting for application confirmation", answers=answered)
+
+    async def _current_options(self, page) -> tuple[str, list[str]]:
+        """(kind, visible options) of the current chatbot question, for the Answers page."""
+        for kind, sel in (("radio", CHAT_RADIO), ("checkbox", CHAT_CHECKBOX), ("chips", CHAT_CHIP)):
+            try:
+                loc = page.locator(sel)
+                n = await loc.count()
+                if n:
+                    return kind, [lbl for lbl in [await _option_label(loc.nth(i)) for i in range(n)] if lbl]
+            except Exception:
+                continue
+        return "text", []
 
     async def _answer_chat(self, page, question: str, profile: dict) -> str | None:
         """Answer the current chatbot question. Returns the answer or None."""

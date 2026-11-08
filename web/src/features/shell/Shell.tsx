@@ -9,6 +9,7 @@ import { useSearch } from '../../state/search';
 import { useTasks } from '../../state/tasks';
 import { useUi } from '../../state/ui';
 import { CommandPalette } from './CommandPalette';
+import { useAnswers } from '../answers/AnswersPage';
 import { InterviewDrawer } from '../resume/InterviewDrawer';
 
 const TITLES: Record<string, string> = {
@@ -19,6 +20,8 @@ const TITLES: Record<string, string> = {
   '/resume': 'Resume and prep',
   '/platforms': 'Platforms',
   '/profile': 'Profile',
+  '/autopilot': 'Autopilot',
+  '/answers': 'Answers',
 };
 
 /** Starts a manual login for a platform and moves to the Platforms page, where its waiting state shows. */
@@ -109,6 +112,7 @@ function Sidebar() {
   const openMistakes = review.data ? review.data.issues.filter((i) => i.severity === 'mistake' && i.status === 'open').length : 0;
   const anyExpired = plats.some((p) => p.session === 'expired');
   const tools = health.data?.mcp_tools;
+  const pendingCount = useAnswers().data?.pending.length ?? 0;
 
   return (
     <aside className={cx('sidebar', ui.navOpen && 'sidebar-open')} aria-label="Sidebar">
@@ -131,7 +135,15 @@ function Sidebar() {
         <NavItem to="/search" icon="search" label="Search">
           {!down && search.jobs.length > 0 && <span className="nav-count num">{shown}</span>}
         </NavItem>
+        <NavItem to="/autopilot" icon="bolt" label="Autopilot" />
         <NavItem to="/applications" icon="applications" label="Applications" />
+        <NavItem to="/answers" icon="chat" label="Answers">
+          {!down && pendingCount > 0 && (
+            <span className="nav-count num" style={{ color: 'var(--warning)' }} aria-label={`${pendingCount} questions waiting for your answer`}>
+              {pendingCount}
+            </span>
+          )}
+        </NavItem>
         <NavItem to="/resume" icon="resume" label="Resume and prep">
           {openMistakes > 0 && (
             <span className="nav-count num" style={{ color: 'var(--danger)' }} aria-label={`${openMistakes} mistakes to fix`}>
@@ -196,7 +208,7 @@ function Topbar({ title }: { title: string }) {
         </span>
         {plats.length > 0 && (
           <button className="sess-dots" aria-label="Session health. Open Platforms" onClick={() => nav('/platforms')}>
-            {plats.map((p) => {
+            {plats.filter((p) => p.login_required !== false).map((p) => {
               const tip = `${p.name}: ${down ? 'Unknown, server unreachable' : SESSION_LABEL[p.session]}`;
               return (
                 <span className="sess" title={tip} key={p.id}>
@@ -242,10 +254,16 @@ function RunningApplyBar() {
   return (
     <div className="runbar" role="status" aria-live="polite">
       <span className="spin" aria-hidden="true" />
-      <strong>{run.stopping ? 'Stopping bulk apply…' : `Bulk apply running${run.live ? ' (live)' : ' (dry run)'}`}</strong>
-      <span className="num">
-        {run.progress.done} of {run.progress.total || '?'} done · {applied} {run.live ? 'applied' : 'would apply'}
-      </span>
+      <strong>
+        {run.stopping ? 'Stopping…' : `${run.autopilot ? 'Autopilot' : 'Bulk apply'} running${run.live ? ' (live)' : ' (dry run)'}`}
+      </strong>
+      {rows.length > 0 ? (
+        <span className="num">
+          {run.progress.done} of {run.progress.total || '?'} done · {applied} {run.live ? 'applied' : 'would apply'}
+        </span>
+      ) : (
+        run.phase && <span>{run.phase}</span>
+      )}
       {current && !run.stopping && <span className="help" style={{ color: 'inherit' }}>Now: {current.title} @ {current.company}</span>}
       <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
         <button className="btn btn-sm" onClick={() => nav('/apply')}>
