@@ -359,11 +359,14 @@ class TestParsers(unittest.TestCase):
 
 class TestRegistry(unittest.TestCase):
     def test_registry(self):
-        self.assertEqual(SUPPORTED_PLATFORMS, ["naukri", "instahyre", "hirist"])
+        self.assertEqual(SUPPORTED_PLATFORMS, ["naukri", "instahyre", "hirist", "himalayas", "ycombinator"])
         for p in SUPPORTED_PLATFORMS:
             cls = get_adapter_class(p)
             self.assertEqual(cls.name, p)
-            self.assertTrue(cls.login_url.startswith("https://"))
+            if cls.login_required:
+                self.assertTrue(cls.login_url.startswith("https://"))
+            else:
+                self.assertTrue(cls.home_url.startswith("https://"))
         for p in PLANNED_PLATFORMS:
             with self.assertRaises(KeyError):
                 get_adapter_class(p)

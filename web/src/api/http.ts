@@ -179,6 +179,17 @@ export function createHttpApi(): Api {
     sendInterview,
     getInterview: (id) => request('GET', `/interview/sessions/${enc(id)}`),
 
+    answers: () => request('GET', '/answers'),
+    addAnswer: (question, answer) => request('POST', '/answers', { question, answer }),
+    updateAnswer: (id, answer) => request('PUT', `/answers/${id}`, { answer }),
+    deleteAnswer: (id) => request('DELETE', `/answers/${id}`),
+    answerPending: (id, answer) => request('POST', `/answers/pending/${id}`, { answer }),
+    dismissPending: (id) => request('DELETE', `/answers/pending/${id}`),
+
+    autopilot: () => request('GET', '/autopilot'),
+    setAutopilot: (body) => request('PUT', '/autopilot', body),
+    runAutopilot: () => request('POST', '/autopilot/run'),
+
     task: (id) => request('GET', `/tasks/${enc(id)}`),
     cancelTask: (id) => request('POST', `/tasks/${enc(id)}/cancel`),
     tasks: (kind, status) => {

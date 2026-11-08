@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../../api';
 import type { ApplyPreview, Job, Platform } from '../../api/types';
@@ -139,48 +139,7 @@ function ReviewStep({ urls, preview, loading, error, live, down, onBack, onMaxEd
         )}
         <ul className="plist" style={{ marginTop: 8 }}>
           {items.map((p) => (
-            <li key={p.job.apply_url} className={cx('pitem', !p.will && 'pitem-skip')}>
-              <div className="c-role" style={{ minWidth: 0 }}>
-                <div className="ptitle">{p.job.title}</div>
-                <div className="reason">
-                  {p.job.company} · {p.job.location} · {p.job.salary}
-                </div>
-              </div>
-              <span className="c-plat">
-                <PlatformBadge id={p.job.platform} />
-              </span>
-              <span className="c-m mono">{p.job.match_score.toFixed(2)}</span>
-              <span style={{ minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span className={cx('pill', p.will ? 'st-will' : 'st-skipped')} style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.reason}>
-                  {p.will ? (live ? 'Will apply' : 'Will simulate') : `Skip · ${p.reason.split('.')[0]}`}
-                </span>
-                {!p.will && (
-                  <button
-                    type="button"
-                    className="btn btn-xs btn-external"
-                    onClick={() => {
-                      window.open(p.job.apply_url, '_blank', 'noopener,noreferrer');
-                      void api.recordExternalApply({
-                        apply_url: p.job.apply_url,
-                        title: p.job.title,
-                        company: p.job.company,
-                        platform: p.job.platform,
-                        location: p.job.location,
-                      }).then(() => {
-                        search.markApplied([p.job.apply_url]);
-                      });
-                    }}
-                    title="Open employer application portal in a new tab"
-                  >
-                    <span>Apply on site</span>
-                    <Icon name="external" small />
-                  </button>
-                )}
-              </span>
-              <button className="btn btn-ghost btn-sm btn-icon c-x" onClick={() => search.toggle(p.job.apply_url)} aria-label={`Remove ${p.job.title} from selection`}>
-                <Icon name="x" small />
-              </button>
-            </li>
+            <ReviewItem key={p.job.apply_url} job={p.job} will={p.will} reason={p.reason} live={live} onRemove={search.toggle} onMarkApplied={search.markApplied} />
           ))}
         </ul>
       </section>
@@ -363,23 +322,7 @@ function RunStep() {
         </div>
         <ul className="plist" style={{ borderTop: '1px solid var(--border)' }}>
           {rows.map((x) => (
-            <li key={x.url} className={cx('ritem', x.state === 'applying' && 'ritem-active')}>
-              <div className="c-role" style={{ minWidth: 0 }}>
-                <div className="ptitle">{x.title}</div>
-                <div className={cx('reason', x.state === 'failed' && 'reason-bad')}>
-                  {x.company} · {x.reason}
-                </div>
-              </div>
-              <span className="c-plat">
-                <PlatformBadge id={x.platform} />
-              </span>
-              <span>
-                <Pill tone={SP[x.state][0]} spin={x.state === 'applying'}>
-                  {SP[x.state][1]}
-                  {x.state === 'applying' && !r.live ? ' (sim)' : ''}
-                </Pill>
-              </span>
-            </li>
+            <RunItem key={x.url} x={x} live={r.live} />
           ))}
         </ul>
       </section>
@@ -411,47 +354,6 @@ function ResultsStep() {
     } else void a.startRetry(retryable, false);
   };
 
-  const Item = ({ x }: { x: RunRow }) => (
-    <li className="ritem">
-      <div className="c-role" style={{ minWidth: 0 }}>
-        <div className="ptitle">
-          {x.title} <span className="muted" style={{ fontWeight: 400 }}>· {x.company}</span>
-        </div>
-        <div className={cx('reason', x.state === 'failed' && 'reason-bad')}>
-          {x.reason}
-          {x.state === 'failed' && x.permanent ? ' Retrying won’t help.' : ''}
-        </div>
-      </div>
-      <span className="c-plat">
-        <PlatformBadge id={x.platform} />
-      </span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span className={`pill ${SP[x.state][0]}`}>{SP[x.state][1]}</span>
-        {(x.state === 'skipped' || x.state === 'failed') && (
-          <button
-            type="button"
-            className="btn btn-xs btn-external"
-            onClick={() => {
-              window.open(x.url, '_blank', 'noopener,noreferrer');
-              void api.recordExternalApply({
-                apply_url: x.url,
-                title: x.title,
-                company: x.company,
-                platform: x.platform,
-              }).then(() => {
-                search.markApplied([x.url]);
-              });
-            }}
-            title="Open external application site in new tab"
-          >
-            <span>Apply on site</span>
-            <Icon name="external" small />
-          </button>
-        )}
-      </span>
-    </li>
-  );
-
   return (
     <>
       <div className="kpis">
@@ -481,7 +383,7 @@ function ResultsStep() {
         </div>
         <ul className="plist">
           {fail.map((x) => (
-            <Item x={x} key={x.url} />
+            <ResultItem x={x} key={x.url} onMarkApplied={search.markApplied} />
           ))}
         </ul>
         {fail.length === 0 && (
@@ -498,7 +400,7 @@ function ResultsStep() {
         </div>
         <ul className="plist">
           {ok.map((x) => (
-            <Item x={x} key={x.url} />
+            <ResultItem x={x} key={x.url} onMarkApplied={search.markApplied} />
           ))}
         </ul>
       </section>
@@ -509,7 +411,7 @@ function ResultsStep() {
           </div>
           <ul className="plist">
             {skip.map((x) => (
-              <Item x={x} key={x.url} />
+              <ResultItem x={x} key={x.url} onMarkApplied={search.markApplied} />
             ))}
           </ul>
         </section>
@@ -525,3 +427,113 @@ function ResultsStep() {
     </>
   );
 }
+
+// Rows are memoized and live at module level, so a progress event (or any re-render of the page)
+// only re-renders the rows whose data changed, instead of rebuilding hundreds of list items.
+
+function openExternal(job: { apply_url: string; title: string; company: string; platform: Platform; location?: string }, onMarkApplied: (urls: string[]) => void) {
+  window.open(job.apply_url, '_blank', 'noopener,noreferrer');
+  void api
+    .recordExternalApply({ apply_url: job.apply_url, title: job.title, company: job.company, platform: job.platform, location: job.location })
+    .then(() => onMarkApplied([job.apply_url]));
+}
+
+const ReviewItem = memo(function ReviewItem({
+  job,
+  will,
+  reason,
+  live,
+  onRemove,
+  onMarkApplied,
+}: {
+  job: Job;
+  will: boolean;
+  reason: string;
+  live: boolean;
+  onRemove: (url: string) => void;
+  onMarkApplied: (urls: string[]) => void;
+}) {
+  return (
+    <li className={cx('pitem', !will && 'pitem-skip')}>
+      <div className="c-role" style={{ minWidth: 0 }}>
+        <div className="ptitle">{job.title}</div>
+        <div className="reason">
+          {job.company} · {job.location} · {job.salary}
+        </div>
+      </div>
+      <span className="c-plat">
+        <PlatformBadge id={job.platform} />
+      </span>
+      <span className="c-m mono">{job.match_score.toFixed(2)}</span>
+      <span style={{ minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span className={cx('pill', will ? 'st-will' : 'st-skipped')} style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }} title={reason}>
+          {will ? (live ? 'Will apply' : 'Will simulate') : `Skip · ${reason.split('.')[0]}`}
+        </span>
+        {!will && (
+          <button type="button" className="btn btn-xs btn-external" onClick={() => openExternal(job, onMarkApplied)} title="Open employer application portal in a new tab">
+            <span>Apply on site</span>
+            <Icon name="external" small />
+          </button>
+        )}
+      </span>
+      <button className="btn btn-ghost btn-sm btn-icon c-x" onClick={() => onRemove(job.apply_url)} aria-label={`Remove ${job.title} from selection`}>
+        <Icon name="x" small />
+      </button>
+    </li>
+  );
+});
+
+const RunItem = memo(function RunItem({ x, live }: { x: RunRow; live: boolean }) {
+  return (
+    <li className={cx('ritem', x.state === 'applying' && 'ritem-active')}>
+      <div className="c-role" style={{ minWidth: 0 }}>
+        <div className="ptitle">{x.title}</div>
+        <div className={cx('reason', x.state === 'failed' && 'reason-bad')}>
+          {x.company} · {x.reason}
+        </div>
+      </div>
+      <span className="c-plat">
+        <PlatformBadge id={x.platform} />
+      </span>
+      <span>
+        <Pill tone={SP[x.state][0]} spin={x.state === 'applying'}>
+          {SP[x.state][1]}
+          {x.state === 'applying' && !live ? ' (sim)' : ''}
+        </Pill>
+      </span>
+    </li>
+  );
+});
+
+const ResultItem = memo(function ResultItem({ x, onMarkApplied }: { x: RunRow; onMarkApplied: (urls: string[]) => void }) {
+  return (
+    <li className="ritem">
+      <div className="c-role" style={{ minWidth: 0 }}>
+        <div className="ptitle">
+          {x.title} <span className="muted" style={{ fontWeight: 400 }}>· {x.company}</span>
+        </div>
+        <div className={cx('reason', x.state === 'failed' && 'reason-bad')}>
+          {x.reason}
+          {x.state === 'failed' && x.permanent ? ' Retrying won’t help.' : ''}
+        </div>
+      </div>
+      <span className="c-plat">
+        <PlatformBadge id={x.platform} />
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span className={`pill ${SP[x.state][0]}`}>{SP[x.state][1]}</span>
+        {(x.state === 'skipped' || x.state === 'failed') && (
+          <button
+            type="button"
+            className="btn btn-xs btn-external"
+            onClick={() => openExternal({ apply_url: x.url, title: x.title, company: x.company, platform: x.platform }, onMarkApplied)}
+            title="Open external application site in new tab"
+          >
+            <span>Apply on site</span>
+            <Icon name="external" small />
+          </button>
+        )}
+      </span>
+    </li>
+  );
+});

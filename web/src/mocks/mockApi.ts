@@ -14,6 +14,7 @@ import type {
   Application,
   ApplyJobEvent,
   ApplyPreview,
+  AutopilotStatus,
   ChatMessage,
   Comparison,
   Feedback,
@@ -21,8 +22,10 @@ import type {
   LastSearch,
   Platform,
   PlatformInfo,
+  PendingQuestion,
   Profile,
   Review,
+  SavedAnswer,
   ScoreKey,
   SearchParams,
   SearchPlatformEvent,
@@ -225,6 +228,28 @@ export function createMockApi(): Api {
     })),
     new_issue_ids: next.issues.slice(-1).map((i) => i.id),
   });
+  // ---------- answer bank + autopilot (mock) ----------
+  let answerSeq = 3;
+  const saved: SavedAnswer[] = [
+    { id: 1, question: 'How many years of experience do you have in FastAPI?', answer: '3', source: 'you', uses: 4, created_at: minsAgo(3000), updated_at: minsAgo(3000) },
+    { id: 2, question: 'Current Organization Name', answer: 'Acme Labs', source: 'manual', uses: 7, created_at: minsAgo(4000), updated_at: minsAgo(4000) },
+  ];
+  const pending: PendingQuestion[] = [
+    { id: 11, question: 'How many years of experience do you have in MCP?', kind: 'chips', options: ['0-1 years', '1-2 years', '2-3 years', '3+ years'], platform: 'naukri', job_title: 'AI Engineer', company: 'HCLTech', apply_url: 'https://www.naukri.com/job-1', times_seen: 3, created_at: minsAgo(200), updated_at: minsAgo(20) },
+    { id: 12, question: 'Which domain/project experience do you have? (US Healthcare or BFSI)?', kind: 'radio', options: ['US Healthcare', 'BFSI', 'Both', 'None'], platform: 'naukri', job_title: 'GenAI Engineer', company: 'Luxoft', apply_url: 'https://www.naukri.com/job-2', times_seen: 1, created_at: minsAgo(90), updated_at: minsAgo(90) },
+    { id: 13, question: 'Please share your LinkedIn profile URL', kind: 'text', options: [], platform: 'naukri', job_title: 'ML Engineer', company: 'Infosys', apply_url: 'https://www.naukri.com/job-3', times_seen: 2, created_at: minsAgo(60), updated_at: minsAgo(30) },
+  ];
+  const autopilotState: AutopilotStatus = {
+    config: { enabled: false, live: false, times: ['09:30', '18:30'], platforms: ['naukri', 'instahyre', 'hirist'], keywords: ['AI/ML Engineer', 'ML Engineer', 'AI Engineer', 'GenAI Engineer', 'LLM Engineer'], location: 'India', min_score: 0.7, daily_caps: { naukri: 80, instahyre: 60, hirist: 30 }, wait_for_me: false },
+    next_run_at: null,
+    running_task_id: null,
+    today: { naukri: 12, instahyre: 5, hirist: 0 },
+    runs: [
+      { id: 2, run_date: localIso().slice(0, 10), slot: '09:30', live: 0, status: 'done', task_id: null, started_at: minsAgo(300), finished_at: minsAgo(250), searched: 412, selected: 47, applied: 39, failed: 5, skipped: 3, message: null },
+      { id: 1, run_date: localIso().slice(0, 10), slot: 'manual', live: 0, status: 'cancelled', task_id: null, started_at: minsAgo(900), finished_at: minsAgo(880), searched: 380, selected: 30, applied: 6, failed: 0, skipped: 24, message: null },
+    ],
+  };
+
   const findIssue = (id: string) => {
     for (const r of Object.values(reviews)) {
       const it = r?.issues.find((i) => i.id === id);
@@ -677,6 +702,66 @@ Score ${r.overall} / 100 (mock report)
         const t = tasks.get(id);
         if (!t) throw new ApiError(404, 'not_found', 'Task not found');
         return { id, kind: t.kind, status: t.status, result: t.result };
+      }),
+    answers: () => net(() => ({ answers: clone(saved), pending: clone(pending) })),
+    addAnswer: (question, answer) =>
+      net(() => {
+        const a: SavedAnswer = { id: ++answerSeq, question, answer, source: 'manual', uses: 0, created_at: localIso(), updated_at: localIso() };
+        saved.unshift(a);
+        return clone(a);
+      }),
+    updateAnswer: (id, answer) =>
+      net(() => {
+        const a = saved.find((x) => x.id === id);
+        if (!a) throw new ApiError(404, 'not_found', 'Answer not found.');
+        Object.assign(a, { answer, source: 'manual', updated_at: localIso() });
+        return clone(a);
+      }),
+    deleteAnswer: (id) =>
+      net(() => {
+        const i = saved.findIndex((x) => x.id === id);
+        if (i < 0) throw new ApiError(404, 'not_found', 'Answer not found.');
+        saved.splice(i, 1);
+        return { ok: true };
+      }),
+    answerPending: (id, answer) =>
+      net(() => {
+        const i = pending.findIndex((x) => x.id === id);
+        if (i < 0) throw new ApiError(404, 'not_found', 'Question not found.');
+        const [q] = pending.splice(i, 1);
+        const a: SavedAnswer = { id: ++answerSeq, question: q.question, answer, source: 'manual', uses: 0, created_at: localIso(), updated_at: localIso() };
+        saved.unshift(a);
+        return clone(a);
+      }),
+    dismissPending: (id) =>
+      net(() => {
+        const i = pending.findIndex((x) => x.id === id);
+        if (i >= 0) pending.splice(i, 1);
+        return { ok: true };
+      }),
+
+    autopilot: () => net(() => clone(autopilotState)),
+    setAutopilot: (body) =>
+      net(() => {
+        if (body.live && !autopilotState.config.live && body.confirm !== 'APPLY')
+          throw new ApiError(400, 'confirm_required', 'Live autopilot submits real applications: confirm with APPLY.');
+        const { confirm: _confirm, ...rest } = body;
+        void _confirm;
+        autopilotState.config = { ...autopilotState.config, ...rest, daily_caps: { ...autopilotState.config.daily_caps, ...(rest.daily_caps ?? {}) } };
+        autopilotState.next_run_at = autopilotState.config.enabled ? localIso(new Date(Date.now() + 3 * 3600_000)) : null;
+        return clone(autopilotState);
+      }),
+    runAutopilot: () =>
+      net(() => {
+        const t = newTask('apply');
+        void (async () => {
+          t.emit('status', { phase: 'searching', message: 'Searching "AI Engineer" (1 of 8)' });
+          await wait(1500);
+          t.emit('status', { phase: 'applying', message: 'Applying to 0 of 42 jobs found' });
+          await wait(500);
+          t.emit('done', { summary: { dry_run: true, attempted: 0, applied: 0, would_apply: 0, failed: 0, skipped: 0, already_applied: 0, by_platform: {} }, applied: [], failed: [], skipped: [] });
+        })();
+        return { task_id: t.id };
       }),
     tasks: (kind, status) =>
       net(() => ({
