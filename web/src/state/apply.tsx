@@ -27,6 +27,10 @@ export type ApplyRun = {
   stopping: boolean;
   stopped: boolean;
   error: ApiError | null;
+  /** Started by autopilot (not from the Bulk apply page). */
+  autopilot?: boolean;
+  /** Autopilot's current phase, e.g. 'Searching "AI Engineer" (2 of 8)'. */
+  phase?: string;
 };
 
 export function skipReasonText(reason: SkipReason, job: Job, max: number): string {
@@ -58,7 +62,7 @@ type ApplyCtx = {
   retryUrls: string[] | null;
   begin: () => void;
   /** Re-attach to a run that is still going on the server (e.g. after a page reload). */
-  attach: (taskId: string, live: boolean) => void;
+  attach: (taskId: string, live: boolean, autopilot?: boolean) => void;
   start: (args: { preview: ApplyPreview; live: boolean; urls: string[] }) => Promise<void>;
   startRetry: (urls: string[], live: boolean) => Promise<void>;
   prepareRetry: (urls: string[]) => void;
@@ -112,6 +116,8 @@ export function ApplyProvider({ children }: { children: ReactNode }) {
               rows: { ...r.rows, [d.apply_url]: row },
             };
           });
+        } else if (ev.type === 'status') {
+          setRun((r) => (r ? { ...r, phase: ev.data.message } : r));
         } else if (ev.type === 'progress') {
           setRun((r) => (r ? { ...r, progress: ev.data } : r));
         } else if (ev.type === 'done' || ev.type === 'error') {
@@ -217,34 +223,38 @@ export function ApplyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const attach = useCallback(
-    (taskId: string, live: boolean) => {
+    (taskId: string, live: boolean, autopilot = false) => {
       // Events replay from the start, so the rows rebuild themselves.
-      setRun({ taskId, live, retry: false, order: [], rows: {}, progress: { done: 0, total: 0 }, done: false, stopping: false, stopped: false, error: null });
+      setRun({ taskId, live, retry: false, order: [], rows: {}, progress: { done: 0, total: 0 }, done: false, stopping: false, stopped: false, error: null, autopilot });
       setStep(2);
       listen(taskId);
     },
     [listen],
   );
 
-  // After a reload, pick up a bulk apply that is still running on the server.
-  const attachIfIdle = useRef<(id: string, live: boolean) => void>(() => {});
-  attachIfIdle.current = (id, live) => {
-    if (!run || run.done) attach(id, live);
+  // Pick up a bulk apply running on the server that this page isn't showing: after a reload,
+  // or a scheduled autopilot run. Checked on load and every 15 s while nothing is running here.
+  const attachIfIdle = useRef<(id: string, live: boolean, autopilot: boolean) => void>(() => {});
+  attachIfIdle.current = (id, live, autopilot) => {
+    if ((!run || run.done) && run?.taskId !== id) attach(id, live, autopilot);
   };
-  const checked = useRef(false);
+  const idle = !run || run.done;
   useEffect(() => {
-    if (checked.current) return;
-    checked.current = true;
-    api
-      .tasks('apply', 'running')
-      .then(({ tasks }) => {
-        const t = tasks[0];
-        if (t) attachIfIdle.current(t.id, t.meta?.dry_run === false);
-      })
-      .catch(() => {
-        // backend unreachable: nothing to re-attach to
-      });
-  }, []);
+    if (!idle) return;
+    const check = () =>
+      api
+        .tasks('apply', 'running')
+        .then(({ tasks }) => {
+          const t = tasks[0];
+          if (t) attachIfIdle.current(t.id, t.meta?.dry_run === false, !!t.meta?.autopilot);
+        })
+        .catch(() => {
+          // backend unreachable: nothing to re-attach to
+        });
+    check();
+    const timer = setInterval(check, 15_000);
+    return () => clearInterval(timer);
+  }, [idle]);
 
   const stop = useCallback(async () => {
     const id = run?.taskId;

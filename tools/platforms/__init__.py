@@ -17,10 +17,14 @@ _ADAPTERS: dict[str, str] = {
     "naukri": "tools.platforms.naukri:NaukriAdapter",
     "instahyre": "tools.platforms.instahyre:InstahyreAdapter",
     "hirist": "tools.platforms.hirist:HiristAdapter",
+    # Public boards: no login, searched over HTTP, applied to on the site.
+    "himalayas": "tools.platforms.himalayas:HimalayasAdapter",
+    "ycombinator": "tools.platforms.ycombinator:YCombinatorAdapter",
 }
 
 # Known but not implemented yet (reported by list_platforms).
-PLANNED_PLATFORMS: list[str] = ["linkedin", "wellfound", "indeed"]
+# welcometothejungle needs an account even to search; hiringcafe sits behind a Cloudflare check.
+PLANNED_PLATFORMS: list[str] = ["linkedin", "wellfound", "indeed", "welcometothejungle", "hiringcafe"]
 
 SUPPORTED_PLATFORMS: list[str] = list(_ADAPTERS)
 

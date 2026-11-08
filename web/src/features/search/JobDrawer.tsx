@@ -11,6 +11,7 @@ export function JobDrawer({
   prefLocs,
   onClose,
   onMove,
+  onExternalApply,
 }: {
   job: Job;
   rows: Job[];
@@ -18,6 +19,7 @@ export function JobDrawer({
   prefLocs: string[];
   onClose: () => void;
   onMove: (i: number) => void;
+  onExternalApply?: (job: Job) => void;
 }) {
   const s = useSearch();
   if (!job) return null;
@@ -113,6 +115,12 @@ export function JobDrawer({
               <dd>{job.easy_apply ? 'Easy Apply' : 'External, on employer site'}</dd>
             </div>
             <div>
+              <dt>Visa Sponsorship</dt>
+              <dd className={job.visa_sponsored ? 'text-visa' : ''}>
+                {job.visa_sponsored ? '🌍 Work visa sponsorship / relocation supported' : 'Not specified in listing'}
+              </dd>
+            </div>
+            <div>
               <dt>Status</dt>
               <dd>{job.already_applied ? 'Already applied' : 'Not applied'}</dd>
             </div>
@@ -148,13 +156,38 @@ export function JobDrawer({
           )}
         </div>
         <div className="dfoot">
-          <a className="btn" href={job.apply_url} target="_blank" rel="noopener noreferrer">
-            Open on {platName(job.platform)}
-            <Icon name="external" small />
-          </a>
-          <button className={cx('btn', !inQ && 'btn-primary')} onClick={() => s.toggle(job.apply_url)} disabled={job.already_applied}>
-            {job.already_applied ? 'Already applied' : inQ ? 'In apply queue · Remove' : 'Add to apply queue'}
-          </button>
+          {job.easy_apply ? (
+            <>
+              <a className="btn" href={job.apply_url} target="_blank" rel="noopener noreferrer">
+                Open on {platName(job.platform)}
+                <Icon name="external" small />
+              </a>
+              <button className={cx('btn', !inQ && 'btn-primary')} onClick={() => s.toggle(job.apply_url)} disabled={job.already_applied}>
+                {job.already_applied ? 'Already applied' : inQ ? 'In apply queue · Remove' : 'Add to apply queue'}
+              </button>
+            </>
+          ) : (
+            <>
+              <a className="btn" href={job.apply_url} target="_blank" rel="noopener noreferrer">
+                Open on {platName(job.platform)}
+                <Icon name="external" small />
+              </a>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  if (onExternalApply) {
+                    onExternalApply(job);
+                  } else {
+                    window.open(job.apply_url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+              >
+                <Icon name="external" small />
+                Apply Externally on Company Site
+              </button>
+            </>
+          )}
         </div>
       </aside>
     </Overlay>

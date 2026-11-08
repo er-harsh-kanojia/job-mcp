@@ -8,7 +8,7 @@ from tools import tracker
 
 JOB_KEYS = ("platform", "job_id", "title", "company", "location", "salary", "apply_url",
             "description", "skills", "exp_min", "exp_max", "posted_days_ago",
-            "match_score", "rank_score", "easy_apply")
+            "match_score", "rank_score", "easy_apply", "visa_sponsored")
 
 
 def to_local(ts: str | None) -> str | None:
@@ -33,6 +33,7 @@ def public_job(job: dict, applied: bool | None = None) -> dict:
     for k in ("match_score", "rank_score"):
         out[k] = round(float(out.get(k) or 0), 4)
     out["easy_apply"] = bool(out.get("easy_apply"))
+    out["visa_sponsored"] = bool(job.get("visa_sponsored"))
     out["already_applied"] = tracker.has_applied(job.get("apply_url") or "") if applied is None else applied
     return out
 

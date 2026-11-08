@@ -7,9 +7,13 @@ export const PLATFORM_NAMES: Record<string, string> = {
   linkedin: 'LinkedIn',
   wellfound: 'Wellfound',
   hirist: 'Hirist',
+  himalayas: 'Himalayas',
+  ycombinator: 'YC Jobs',
+  welcometothejungle: 'Welcome to the Jungle',
+  hiringcafe: 'HiringCafe',
 };
-export const LIVE_PLATFORMS = ['naukri', 'instahyre', 'hirist'] as const;
-export const PLATFORM_ORDER = ['naukri', 'instahyre', 'hirist', 'linkedin', 'wellfound', 'indeed'];
+export const LIVE_PLATFORMS = ['naukri', 'instahyre', 'hirist', 'himalayas', 'ycombinator'] as const;
+export const PLATFORM_ORDER = ['naukri', 'instahyre', 'hirist', 'himalayas', 'ycombinator', 'linkedin', 'wellfound', 'indeed', 'welcometothejungle', 'hiringcafe'];
 
 export function platName(id: PlatformId): string {
   return PLATFORM_NAMES[id] ?? id.charAt(0).toUpperCase() + id.slice(1);

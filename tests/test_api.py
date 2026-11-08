@@ -358,7 +358,8 @@ class TestHealthAndPlatforms(ApiTestCase):
         from tools.browser import mark_logged_in
         mark_logged_in("naukri")
         ps = {p["id"]: p for p in self.client.get("/api/platforms").json()["platforms"]}
-        self.assertEqual(set(ps), {"naukri", "instahyre", "indeed", "linkedin", "wellfound", "hirist"})
+        self.assertEqual(set(ps), {"naukri", "instahyre", "hirist", "himalayas", "ycombinator", "indeed", "linkedin",
+                                   "wellfound", "welcometothejungle", "hiringcafe"})
         self.assertTrue(ps["naukri"]["live"])
         self.assertEqual(ps["naukri"]["session"], "logged_in")
         self.assertIsNotNone(ps["naukri"]["last_checked"])
@@ -563,6 +564,20 @@ class TestApply(ApiTestCase):
 
 
 class TestApplicationsAndStats(ApiTestCase):
+    def test_record_external_apply(self):
+        r = self.client.post("/api/apply/external", json={
+            "apply_url": "https://company.careers/job/123",
+            "title": "Staff ML Engineer",
+            "company": "Booking.com",
+            "platform": "naukri",
+            "location": "Amsterdam"
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"ok": True, "apply_url": "https://company.careers/job/123", "status": "applied"})
+        self.assertTrue(tracker.has_applied("https://company.careers/job/123"))
+        apps = self.client.get("/api/applications").json()["applications"]
+        self.assertTrue(any(a["apply_url"] == "https://company.careers/job/123" and a["status"] == "applied" for a in apps))
+
     def test_list_and_stats(self):
         tracker.record(normalize_job(J_OK1), "applied")
         tracker.record(normalize_job(J_OK2), "failed", "Unknown required field")

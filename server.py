@@ -63,7 +63,7 @@ _last_results: dict[str, dict] = {}
 
 _JOB_KEYS = ("platform", "job_id", "title", "company", "location", "salary", "apply_url",
              "description", "skills", "exp_min", "exp_max", "posted_days_ago",
-             "match_score", "rank_score", "easy_apply")
+             "match_score", "rank_score", "easy_apply", "visa_sponsored")
 
 
 def _public(job: dict, desc_len: int = 300) -> dict:
@@ -100,7 +100,8 @@ async def search_jobs(keywords: list[str], location: str = "India",
                       min_match_score: float = 0.25,
                       max_results: int = 50,
                       limit_per_platform: int = 40,
-                      exclude_companies: list[str] | None = None) -> dict[str, Any]:
+                      exclude_companies: list[str] | None = None,
+                      visa_sponsored_only: bool = False) -> dict[str, Any]:
     """Search jobs across platforms (default: all supported), score, dedupe and filter them.
 
     keywords: e.g. ["ML Engineer", "GenAI Engineer"] (each is searched separately).
@@ -119,7 +120,8 @@ async def search_jobs(keywords: list[str], location: str = "India",
                 seen.add(j["apply_url"])
                 all_jobs.append(j)
     filtered = search_mod.filter_jobs(all_jobs, min_match_score=min_match_score, experience_years=exp,
-                                      exclude_companies=exclude_companies)
+                                      exclude_companies=exclude_companies,
+                                      visa_sponsored_only=visa_sponsored_only)
     for j in filtered:
         _last_results[j["apply_url"]] = j
     try:  # shared cache: the web UI's apply-by-URL and the resume demand analysis use it

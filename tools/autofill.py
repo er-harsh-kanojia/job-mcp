@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from datetime import date as _date, timedelta as _timedelta
 from typing import Any, Iterable
 
 # Aliases that map phrases found in questions to config.autofill.experience keys.
@@ -81,6 +82,69 @@ def notice_days(notice: str) -> int:
     return n * (30 if unit == "month" else 7 if unit == "week" else 1)
 
 
+_MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september",
+           "october", "november", "december"]
+
+
+def lwd_date(value: str, today: _date | None = None) -> _date | None:
+    """Parse a last-working-day value: "20 Feb 2027", "20 Febuary", "2027-02-20", "20/02/2027"
+    (day first). A date without a year is the next such date from today."""
+    t = (value or "").strip().lower()
+    if not t or "currently working" in t:
+        return None
+    today = today or _date.today()
+    m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        try:
+            return _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})", t)
+    if m:
+        y = int(m.group(3)) + (2000 if len(m.group(3)) == 2 else 0)
+        try:
+            return _date(y, int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None
+    m = re.search(r"(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\.?,?\s*(\d{4})?", t)
+    if m:
+        day, word, year = int(m.group(1)), m.group(2), m.group(3)
+    else:
+        m = re.search(r"([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?", t)
+        if not m:
+            return None
+        word, day, year = m.group(1), int(m.group(2)), m.group(3)
+    month = next((i + 1 for i, name in enumerate(_MONTHS) if name.startswith(word[:3])), None)
+    if month is None:  # typos such as "decemeber"
+        close = difflib.get_close_matches(word, _MONTHS, n=1, cutoff=0.7)
+        month = _MONTHS.index(close[0]) + 1 if close else None
+    if month is None:
+        return None
+    try:
+        d = _date(int(year) if year else today.year, month, day)
+    except ValueError:
+        return None
+    if not year and d < today:
+        d = d.replace(year=today.year + 1)
+    return d
+
+
+def days_to_join(af: dict, today: _date | None = None) -> int:
+    """Days until you can join: ``can_join_within_days`` when you've set it, else from the
+    last working day when it's set and ahead, else the notice period. -1 if unknown."""
+    override = af.get("can_join_within_days")
+    if override not in (None, ""):
+        try:
+            return max(0, int(override))
+        except (TypeError, ValueError):
+            pass
+    today = today or _date.today()
+    d = lwd_date(str(af.get("last_working_day") or ""), today)
+    if d is not None and d >= today:
+        return (d - today).days + 1
+    return notice_days(str(af.get("notice_period") or ""))
+
+
 def find_skill(question: str, skill_years: dict[str, str]) -> str | None:
     """Find which configured skill a question is about (fuzzy). Returns the key."""
     q = " " + _norm(question).replace("/", " / ") + " "
@@ -124,6 +188,15 @@ def _ctc_value(lakhs: str, question: str) -> str:
     return f"{val:g}"
 
 
+def _saved_answer(question: str) -> str | None:
+    """Your answer-bank answer for this question (see tools/answers.py), or None."""
+    try:
+        from .answers import lookup
+    except Exception:
+        return None
+    return lookup(question)
+
+
 def answer_question(question: str, profile: dict, kind: str = "text",
                     options: Iterable[str] | None = None) -> str | None:
     """Best answer for a question, or None if we cannot answer it confidently.
@@ -138,10 +211,13 @@ def answer_question(question: str, profile: dict, kind: str = "text",
     skill_years = {str(k).lower(): str(v) for k, v in (af.get("experience") or {}).items()}
     total_exp = str(af.get("total_experience") or profile.get("experience_years") or "")
     options = [o for o in (options or []) if str(o).strip()]
-    answer: str | None = None
+    # Your own answer to this exact question (answer bank) wins over the rules below.
+    answer: str | None = _saved_answer(question)
 
     # --- identity / contact -------------------------------------------------
-    if _has(q, r"\bfirst name\b"):
+    if answer is not None:
+        pass
+    elif _has(q, r"\bfirst name\b"):
         answer = _first_name(profile.get("name", ""))
     elif _has(q, r"\blast name\b", r"\bsurname\b", r"\bfamily name\b"):
         answer = _last_name(profile.get("name", ""))
@@ -160,19 +236,43 @@ def answer_question(question: str, profile: dict, kind: str = "text",
         answer = _ctc_value(af.get("current_ctc", ""), question) if af.get("current_ctc") else None
 
     # --- notice period / joining -------------------------------------------
+    elif _has(q, r"last working day", r"\blwd\b", r"relieving date"):
+        d = lwd_date(str(af.get("last_working_day") or ""))
+        if d is None:
+            answer = af.get("last_working_day") or None
+        else:
+            answer = d.isoformat() if kind == "date" else d.strftime("%d %b %Y")
     elif _has(q, r"notice period", r"\bnotice\b"):
+        lwd = lwd_date(str(af.get("last_working_day") or ""))
         if _has(q, r"serving", r"are you (currently )?in"):
-            answer = "No" if "currently working" in str(af.get("last_working_day", "")).lower() else "Yes"
+            answer = "Yes" if lwd is not None else (
+                "No" if "currently working" in str(af.get("last_working_day", "")).lower() else None)
+        elif lwd is not None and options and any("serving" in o.lower() for o in options):
+            return next(o for o in options if "serving" in o.lower())
+        elif lwd is not None:
+            nd = days_to_join(af)
+            answer = (str(nd) if kind == "number" else
+                      f"{nd} days" if options else
+                      f"Serving notice period, last working day {lwd.strftime('%d %b %Y')}")
         else:
             nd = notice_days(af.get("notice_period", ""))
             answer = (str(nd) if kind == "number" else af.get("notice_period")) if nd >= 0 else None
-    elif _has(q, r"last working day", r"\blwd\b"):
-        answer = af.get("last_working_day") or None
+    elif _has(q, r"how soon can you join", r"earliest (possible )?(joining|start|date)",
+              r"when can you (join|start)", r"expected (date of )?joining", r"joining date",
+              r"date of joining"):
+        lwd = lwd_date(str(af.get("last_working_day") or ""))
+        nd = days_to_join(af)
+        if lwd is not None:
+            start = lwd + _timedelta(days=1)
+            answer = (start.isoformat() if kind == "date" else str(nd) if kind == "number" else
+                      f"{nd} days" if options else f"From {start.strftime('%d %b %Y')} (serving notice)")
+        elif nd >= 0:
+            answer = str(nd) if kind == "number" else af.get("notice_period")
     elif _has(q, r"immediate(ly)? join", r"join immediately", r"immediate joiner"):
-        nd = notice_days(af.get("notice_period", ""))
+        nd = days_to_join(af)
         answer = "Yes" if 0 <= nd <= 15 else "No" if nd > 15 else None
     elif m := re.search(r"join (?:with)?in (\d+)\s*(day|week|month)", q):
-        nd = notice_days(af.get("notice_period", ""))
+        nd = days_to_join(af)
         limit = int(m.group(1)) * (30 if m.group(2) == "month" else 7 if m.group(2) == "week" else 1)
         answer = ("Yes" if nd <= limit else "No") if nd >= 0 else None
 

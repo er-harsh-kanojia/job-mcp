@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from tools.ai import llm
 from tools.config import ROOT_DIR
 
-from . import VERSION, errors, routes_ai, routes_jobs, routes_profile
+from . import VERSION, errors, routes_ai, routes_answers, routes_autopilot, routes_jobs, routes_profile
 from .errors import error_body
 
 log = logging.getLogger("job_mcp.api")
@@ -34,19 +36,35 @@ def web_dist() -> Path:
     return Path(os.environ.get("JOB_MCP_WEB_DIST") or (ROOT_DIR / "web" / "dist"))
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Scheduled autopilot runs (off unless enabled on the Autopilot page). Tests set
+    # JOB_MCP_NO_SCHEDULER so they never start real searches.
+    loop_task = None
+    if not os.environ.get("JOB_MCP_NO_SCHEDULER"):
+        loop_task = asyncio.create_task(routes_autopilot.scheduler_loop())
+    try:
+        yield
+    finally:
+        if loop_task is not None:
+            loop_task.cancel()
+
+
 def create_app() -> FastAPI:
     llm.load_env()
     # Tasks started from the UI must not block on a captcha; they report
     # captcha_required instead (the login flow still lets you solve it).
     os.environ.setdefault("JOB_MCP_NONINTERACTIVE", "1")
 
-    app = FastAPI(title="Job MCP", version=VERSION)
+    app = FastAPI(title="Job MCP", version=VERSION, lifespan=_lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=DEV_ORIGINS, allow_credentials=True,
                        allow_methods=["*"], allow_headers=["*"])
     errors.install(app)
     app.include_router(routes_jobs.router)
     app.include_router(routes_profile.router)
     app.include_router(routes_ai.router)
+    app.include_router(routes_answers.router)
+    app.include_router(routes_autopilot.router)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                    include_in_schema=False)

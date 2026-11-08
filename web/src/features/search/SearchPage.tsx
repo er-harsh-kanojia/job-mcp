@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Job, Platform, PlatformInfo, SearchPlatformEvent } from '../../api/types';
-import { errorMessage } from '../../api';
+import { api, errorMessage } from '../../api';
 import { Icon } from '../../components/Icon';
 import { Alert, cx, EmptyState, MatchScore, Pill, PlatformBadge, SkeletonRows } from '../../components/ui';
 import { expLabel, joinList, LIVE_PLATFORMS, matchColor, pct, platName, PLATFORM_ORDER, postedLabel, salaryLow, skillLabel } from '../../lib/format';
@@ -70,12 +70,15 @@ export function SearchPage() {
     [s.params.exclude_companies],
   );
 
+  const visaCount = useMemo(() => s.jobs.filter((j) => j.visa_sponsored).length, [s.jobs]);
+
   const rows = useMemo(() => {
     const k = SORT_FN[sort];
     const d = dir === 'asc' ? 1 : -1;
     return s.jobs
       .filter((j) => {
         if (j.match_score < s.minScore - 1e-9) return false;
+        if (s.visaOnly && !j.visa_sponsored) return false;
         if (excludedLower.length > 0) {
           const comp = (j.company || '').toLowerCase();
           if (excludedLower.some((ex) => comp === ex || comp.includes(ex))) return false;
@@ -83,8 +86,34 @@ export function SearchPage() {
         return true;
       })
       .sort((a, b) => (k(a) - k(b)) * d || b.rank_score - a.rank_score);
-  }, [s.jobs, s.minScore, sort, dir, excludedLower]);
+  }, [s.jobs, s.minScore, s.visaOnly, sort, dir, excludedLower]);
+
+  const handleExternalApply = (j: Job) => {
+    window.open(j.apply_url, '_blank', 'noopener,noreferrer');
+    void api.recordExternalApply({
+      apply_url: j.apply_url,
+      title: j.title,
+      company: j.company,
+      platform: j.platform,
+      location: j.location,
+    }).then(() => {
+      s.markApplied([j.apply_url]);
+    });
+  };
   const f = Math.max(0, Math.min(focus, rows.length - 1));
+  // Stable callbacks, so memoized rows re-render only when their own job, selection or focus changes
+  // (not on every bulk-apply progress event, which re-renders this page).
+  const externalRef = useRef(handleExternalApply);
+  externalRef.current = handleExternalApply;
+  const onExternal = useCallback((j: Job) => externalRef.current(j), []);
+  const openDrawer = useCallback((i: number, url: string) => {
+    setFocus(i);
+    setDrawer(url);
+  }, []);
+  const registerRow = useCallback((i: number, el: HTMLDivElement | null) => {
+    if (el) rowRefs.current.set(i, el);
+  }, []);
+  const phone = useIsPhone();
 
   // Keyboard: J/K move, X select, Enter open, / focus keywords (design hints in the results toolbar).
   useEffect(() => {
@@ -228,6 +257,7 @@ export function SearchPage() {
           <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }} className="num">
             {s.params.keywords.length} keywords · {s.params.location || 'Anywhere'} · {s.params.experience_years} yrs · ≥ {s.minScore.toFixed(2)}
             {(s.params.exclude_companies?.length ?? 0) > 0 ? ` · ${s.params.exclude_companies?.length} excluded` : ''}
+            {s.visaOnly ? ' · 🌍 Visa only' : ''}
           </span>
         </button>
         <button className="btn btn-primary" style={{ minHeight: 44, width: 44, padding: 0 }} onClick={() => void s.run()} disabled={runDisabled} aria-label="Run search">
@@ -304,6 +334,24 @@ export function SearchPage() {
               placeholder="Exclude company (e.g. TCS, Infosys), Enter"
               aria-label="Exclude company"
             />
+          </div>
+        </div>
+        <div className="frow" style={{ marginTop: 12, alignItems: 'center' }}>
+          <span className="lbl flbl" id="visa-filter-label">
+            Sponsorship
+          </span>
+          <div className="chips" role="group" aria-labelledby="visa-filter-label">
+            <button
+              type="button"
+              className={cx('chip chip-visa', s.visaOnly && 'chip-on')}
+              onClick={() => s.setVisaOnly(!s.visaOnly)}
+              aria-pressed={s.visaOnly}
+              title="Show only companies offering work visa sponsorship"
+            >
+              <span style={{ fontSize: '13px' }}>🌍</span>
+              <span>Work Visa Sponsorship Only</span>
+              {visaCount > 0 && <span className="cnt">({visaCount})</span>}
+            </button>
           </div>
         </div>
         <div className="fgrid">
@@ -508,6 +556,7 @@ export function SearchPage() {
             </div>
           </div>
 
+          {!phone && (
           <div className="tscroll jobs-table">
             <div className="tbl" role="table" aria-label="Search results" aria-rowcount={rows.length + 1}>
               <div className="trow jgrid thead" role="row">
@@ -540,111 +589,32 @@ export function SearchPage() {
                   </button>
                 </span>
               </div>
-              {rows.map((j, i) => {
-                const on = s.isSelected(j.apply_url);
-                return (
-                  <div
-                    key={j.apply_url}
-                    role="row"
-                    ref={(el) => {
-                      if (el) rowRefs.current.set(i, el);
-                    }}
-                    className={cx('trow jgrid jrow', compact && 'trow-compact', on && 'jrow-sel', i === f && 'jrow-focus')}
-                    onClick={() => setFocus(i)}
-                  >
-                    <label className="cbx c-cb" role="cell">
-                      <input type="checkbox" checked={on} onChange={() => s.toggle(j.apply_url)} aria-label={`Select ${j.title} at ${j.company}`} />
-                    </label>
-                    <span className="c-rank mono help" role="cell">
-                      {j.rank_score.toFixed(2)}
-                    </span>
-                    <div className="c-role" role="cell">
-                      <div className="rline">
-                        <button
-                          className="linkbtn"
-                          onClick={() => {
-                            setFocus(i);
-                            setDrawer(j.apply_url);
-                          }}
-                        >
-                          {j.title}
-                        </button>
-                        {j.already_applied && <span className="pill st-applied">Applied</span>}
-                      </div>
-                      <div className="rsub">{j.company}</div>
-                    </div>
-                    <span role="cell">
-                      <PlatformBadge id={j.platform} className="c-plat" />
-                    </span>
-                    <span className="c-loc" role="cell">
-                      {j.location}
-                    </span>
-                    <span className={cx('c-sal num', !salaryLow(j.salary) && 'muted')} role="cell">
-                      {j.salary}
-                    </span>
-                    <span className={cx('c-exp num', j.exp_min === -1 && 'muted')} role="cell">
-                      {expLabel(j.exp_min, j.exp_max)}
-                    </span>
-                    <span className={cx('c-post', j.posted_days_ago === 0 && 'fresh')} role="cell">
-                      {postedLabel(j.posted_days_ago)}
-                    </span>
-                    <span className="c-easy" role="cell">
-                      {j.easy_apply ? (
-                        <span className="easy">
-                          <Icon name="bolt" small />
-                          Easy Apply
-                        </span>
-                      ) : (
-                        <span className="help">External</span>
-                      )}
-                    </span>
-                    <span role="cell" style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <MatchScore value={j.match_score} />
-                    </span>
-                  </div>
-                );
-              })}
+              {rows.map((j, i) => (
+                <JobRow
+                  key={j.apply_url}
+                  job={j}
+                  index={i}
+                  selected={s.isSelected(j.apply_url)}
+                  focused={i === f}
+                  compact={compact}
+                  onToggle={s.toggle}
+                  onFocusRow={setFocus}
+                  onOpen={openDrawer}
+                  onExternal={onExternal}
+                  register={registerRow}
+                />
+              ))}
               {s.running && <SkeletonRows rows={rows.length ? 2 : 4} />}
             </div>
           </div>
+          )}
 
-          {/* phone: result cards */}
+          {/* phone: result cards (only one of table / cards is rendered) */}
+          {phone && (
           <div className="jcards" aria-label="Search results">
-            {rows.map((j, i) => {
-              const on = s.isSelected(j.apply_url);
-              return (
-                <article key={j.apply_url} className={cx('card jcard', on && 'jcard-sel', i === f && 'jcard-focus')}>
-                  <label className="cbx">
-                    <input type="checkbox" checked={on} onChange={() => s.toggle(j.apply_url)} aria-label={`Select ${j.title}`} />
-                  </label>
-                  <div style={{ minWidth: 0 }}>
-                    <button className="linkbtn" style={{ fontWeight: 600, whiteSpace: 'normal' }} onClick={() => setDrawer(j.apply_url)}>
-                      {j.title}
-                    </button>
-                    <div className="help">
-                      {j.company}
-                      {j.already_applied ? ' · Applied' : ''}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="mbar">
-                      <span style={{ width: pct(j.match_score), background: matchColor(j.match_score) }} />
-                    </span>
-                    <span className="mono" style={{ fontWeight: 600 }}>
-                      {j.match_score.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="jmeta">
-                    <PlatformBadge id={j.platform} />
-                    <span>{j.location}</span>
-                    <span className="num">{j.salary}</span>
-                    <span className="num">{expLabel(j.exp_min, j.exp_max)}</span>
-                    <span className={j.posted_days_ago === 0 ? 'fresh' : ''}>{postedLabel(j.posted_days_ago)}</span>
-                    <span>{j.easy_apply ? 'Easy Apply' : 'External'}</span>
-                  </div>
-                </article>
-              );
-            })}
+            {rows.map((j, i) => (
+              <JobCard key={j.apply_url} job={j} index={i} selected={s.isSelected(j.apply_url)} focused={i === f} onToggle={s.toggle} onOpen={openDrawer} onExternal={onExternal} />
+            ))}
             {s.running && (
               <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }} aria-hidden="true">
                 <span className="skel" style={{ width: '60%' }} />
@@ -652,6 +622,7 @@ export function SearchPage() {
               </div>
             )}
           </div>
+          )}
 
           {!s.running && rows.length === 0 && (
             <EmptyState
@@ -698,6 +669,7 @@ export function SearchPage() {
           mine={mine}
           prefLocs={prefLocs}
           onClose={() => setDrawer(null)}
+          onExternalApply={handleExternalApply}
           onMove={(i) => {
             setFocus(i);
             setDrawer(rows[i].apply_url);
@@ -765,3 +737,156 @@ function ProgressRow({ id, ev, inRun, session }: { id: Platform; ev?: SearchPlat
     </div>
   );
 }
+
+/** True at the phone breakpoint (matches the 760px media query in index.css). */
+const PHONE_QUERY = '(max-width: 760px)';
+function useIsPhone(): boolean {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(PHONE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_QUERY);
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+type RowProps = {
+  job: Job;
+  index: number;
+  selected: boolean;
+  focused: boolean;
+  onToggle: (url: string) => void;
+  onOpen: (i: number, url: string) => void;
+  onExternal: (j: Job) => void;
+};
+
+const JobRow = memo(function JobRow({
+  job: j,
+  index: i,
+  selected: on,
+  focused,
+  compact,
+  onToggle,
+  onFocusRow,
+  onOpen,
+  onExternal,
+  register,
+}: RowProps & { compact: boolean; onFocusRow: (i: number) => void; register: (i: number, el: HTMLDivElement | null) => void }) {
+  return (
+    <div
+      role="row"
+      ref={(el) => register(i, el)}
+      className={cx('trow jgrid jrow', compact && 'trow-compact', on && 'jrow-sel', focused && 'jrow-focus')}
+      onClick={() => onFocusRow(i)}
+    >
+      <label className="cbx c-cb" role="cell">
+        <input type="checkbox" checked={on} onChange={() => onToggle(j.apply_url)} aria-label={`Select ${j.title} at ${j.company}`} />
+      </label>
+      <span className="c-rank mono help" role="cell">
+        {j.rank_score.toFixed(2)}
+      </span>
+      <div className="c-role" role="cell">
+        <div className="rline">
+          <button className="linkbtn" onClick={() => onOpen(i, j.apply_url)}>
+            {j.title}
+          </button>
+          {j.visa_sponsored && <span className="pill pill-visa" title="Work visa sponsorship / relocation supported">🌍 Visa</span>}
+          {j.already_applied && <span className="pill st-applied">Applied</span>}
+        </div>
+        <div className="rsub">{j.company}</div>
+      </div>
+      <span role="cell">
+        <PlatformBadge id={j.platform} className="c-plat" />
+      </span>
+      <span className="c-loc" role="cell">
+        {j.location}
+      </span>
+      <span className={cx('c-sal num', !salaryLow(j.salary) && 'muted')} role="cell">
+        {j.salary}
+      </span>
+      <span className={cx('c-exp num', j.exp_min === -1 && 'muted')} role="cell">
+        {expLabel(j.exp_min, j.exp_max)}
+      </span>
+      <span className={cx('c-post', j.posted_days_ago === 0 && 'fresh')} role="cell">
+        {postedLabel(j.posted_days_ago)}
+      </span>
+      <span className="c-easy" role="cell">
+        {j.easy_apply ? (
+          <span className="easy">
+            <Icon name="bolt" small />
+            Easy Apply
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-external"
+            onClick={(e) => {
+              e.stopPropagation();
+              onExternal(j);
+            }}
+            title="Open external application site in new tab"
+          >
+            <span>Apply on site</span>
+            <Icon name="external" small />
+          </button>
+        )}
+      </span>
+      <span role="cell" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <MatchScore value={j.match_score} />
+      </span>
+    </div>
+  );
+});
+
+const JobCard = memo(function JobCard({ job: j, index: i, selected: on, focused, onToggle, onOpen, onExternal }: RowProps) {
+  return (
+    <article className={cx('card jcard', on && 'jcard-sel', focused && 'jcard-focus')}>
+      <label className="cbx">
+        <input type="checkbox" checked={on} onChange={() => onToggle(j.apply_url)} aria-label={`Select ${j.title}`} />
+      </label>
+      <div style={{ minWidth: 0 }}>
+        <button className="linkbtn" style={{ fontWeight: 600, whiteSpace: 'normal' }} onClick={() => onOpen(i, j.apply_url)}>
+          {j.title}
+        </button>
+        <div className="help">
+          {j.company}
+          {j.visa_sponsored && <span className="pill pill-visa">🌍 Visa</span>}
+          {j.already_applied ? ' · Applied' : ''}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="mbar">
+          <span style={{ width: pct(j.match_score), background: matchColor(j.match_score) }} />
+        </span>
+        <span className="mono" style={{ fontWeight: 600 }}>
+          {j.match_score.toFixed(2)}
+        </span>
+      </div>
+      <div className="jmeta">
+        <PlatformBadge id={j.platform} />
+        <span>{j.location}</span>
+        <span className="num">{j.salary}</span>
+        <span className="num">{expLabel(j.exp_min, j.exp_max)}</span>
+        <span className={j.posted_days_ago === 0 ? 'fresh' : ''}>{postedLabel(j.posted_days_ago)}</span>
+        <span>
+          {j.easy_apply ? (
+            'Easy Apply'
+          ) : (
+            <button
+              type="button"
+              className="btn btn-external"
+              style={{ padding: '0 6px', height: 20, fontSize: 11 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExternal(j);
+              }}
+            >
+              <span>Apply ↗</span>
+            </button>
+          )}
+        </span>
+      </div>
+    </article>
+  );
+});

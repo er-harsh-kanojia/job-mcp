@@ -27,6 +27,7 @@ JOB_FIELDS_DEFAULTS: dict[str, Any] = {
     "match_score": 0.0,
     "rank_score": 0.0,
     "easy_apply": False,
+    "visa_sponsored": False,
 }
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -214,6 +215,77 @@ def title_company_key(job: dict) -> tuple[str, str]:
     return normalize_title(job.get("title", "")), normalize_company(job.get("company", ""))
 
 
+# ------------------------------------------------------------------- visa sponsorship
+
+VISA_SPONSORING_COMPANIES = {
+    "booking.com", "booking", "amazon", "aws", "google", "meta", "microsoft", "spotify",
+    "adyen", "asml", "revolut", "deliveroo", "palantir", "databricks", "snowflake",
+    "stripe", "uber", "bloomberg", "klarna", "zalando", "shopify", "canva",
+    "atlassian", "elastic", "gitlab", "github", "cloudflare"
+}
+
+_VISA_POSITIVE_RE = re.compile(
+    r"\b(?:"
+    r"visa\s+sponsor(?:ship|ed|s|ing)?|"
+    r"sponsors?(?:ing)?\s+(?:work\s+|h-?1b\s+)?visas?|"
+    r"sponsorship\s+(?:is\s+)?available|"
+    r"work\s+visa|"
+    r"work\s+permit\s+sponsor(?:ship)?|"
+    r"visa\s+support(?:ed)?|"
+    r"relocation\s+(?:assistance|package|support|allowance|bonus)|"
+    r"relocation\s+to\s+[a-z]+|"
+    r"h-?1b\s+(?:sponsorship|transfer|eligible|cap-exempt)|"
+    r"skilled\s+worker\s+visa|"
+    r"tier\s*2\s+visa|"
+    r"eu\s+blue\s+card|"
+    r"work\s+authorization\s+sponsorship"
+    r")\b",
+    re.I
+)
+
+_VISA_NEGATIVE_RE = re.compile(
+    r"\b(?:"
+    r"no\s+visa\s+sponsor(?:ship)?|"
+    r"cannot\s+sponsor|"
+    r"can\s*not\s+sponsor|"
+    r"will\s+not\s+(?:provide\s+)?sponsor(?:ship)?|"
+    r"unable\s+to\s+sponsor|"
+    r"not\s+able\s+to\s+sponsor|"
+    r"without\s+(?:any\s+)?(?:visa\s+)?sponsorship|"
+    r"not\s+offer(?:ing)?\s+(?:visa\s+)?sponsorship|"
+    r"no\s+sponsorship\s+(?:is\s+)?available|"
+    r"sponsorship\s+(?:is\s+)?not\s+available|"
+    r"sponsorship\s+(?:is\s+)?not\s+provided|"
+    r"not\s+eligible\s+for\s+(?:visa\s+)?sponsorship|"
+    r"must\s+be\s+authorized\s+to\s+work\s+without\s+sponsorship|"
+    r"requires?\s+work\s+authorization\s+without\s+sponsorship"
+    r")\b",
+    re.I
+)
+
+
+def detect_visa_sponsorship(title: str = "", description: str = "",
+                            skills: list[str] | None = None, company: str = "") -> bool:
+    """Detect if a job listing offers work visa sponsorship or relocation."""
+    text = f"{title} {description} {' '.join(skills or [])}".lower()
+
+    # 1. Check for explicit negative indicators first
+    if _VISA_NEGATIVE_RE.search(text):
+        return False
+
+    # 2. Check for positive indicators in text
+    if _VISA_POSITIVE_RE.search(text):
+        return True
+
+    # 3. Check if company is a known global visa-sponsoring employer
+    norm_comp = normalize_company(company).lower()
+    for vc in VISA_SPONSORING_COMPANIES:
+        if vc == norm_comp or f" {vc} " in f" {norm_comp} " or norm_comp.startswith(vc) or norm_comp.endswith(vc):
+            return True
+
+    return False
+
+
 # ------------------------------------------------------------------- records
 
 def normalize_job(raw: dict, platform: str | None = None) -> dict:
@@ -246,6 +318,12 @@ def normalize_job(raw: dict, platform: str | None = None) -> dict:
             job[k] = 0.0
     if not job["company"]:
         job["company"] = "Unknown"
+    job["visa_sponsored"] = bool(raw.get("visa_sponsored")) if raw and "visa_sponsored" in raw else detect_visa_sponsorship(
+        title=job["title"],
+        description=job["description"],
+        skills=job["skills"],
+        company=job["company"],
+    )
     return job
 
 

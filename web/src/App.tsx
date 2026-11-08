@@ -8,6 +8,8 @@ import { ApplicationsPage } from './features/applications/ApplicationsPage';
 import { ResumePage } from './features/resume/ResumePage';
 import { PlatformsPage } from './features/platforms/PlatformsPage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { AnswersPage } from './features/answers/AnswersPage';
+import { AutopilotPage } from './features/autopilot/AutopilotPage';
 import { shouldRetry } from './lib/queries';
 import { UiProvider } from './state/ui';
 import { SearchProvider } from './state/search';
@@ -38,6 +40,8 @@ export function App() {
                     <Route path="resume" element={<ResumePage />} />
                     <Route path="platforms" element={<PlatformsPage />} />
                     <Route path="profile" element={<ProfilePage />} />
+                    <Route path="autopilot" element={<AutopilotPage />} />
+                    <Route path="answers" element={<AnswersPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>
                 </Routes>

@@ -1,6 +1,6 @@
 // Types from docs/api-contract.md (v1). Keep in sync with the contract, not with the backend code.
 
-export type Platform = 'naukri' | 'instahyre' | 'hirist';
+export type Platform = 'naukri' | 'instahyre' | 'hirist' | 'himalayas' | 'ycombinator';
 /** Any platform id GET /api/platforms may return, including planned ones (linkedin, wellfound, indeed). */
 export type PlatformId = Platform | 'linkedin' | 'wellfound' | 'indeed' | (string & {});
 
@@ -20,6 +20,7 @@ export type Job = {
   match_score: number;
   rank_score: number;
   easy_apply: boolean;
+  visa_sponsored?: boolean;
   already_applied: boolean;
 };
 
@@ -56,6 +57,8 @@ export type PlatformInfo = {
   name: string;
   live: boolean;
   session: SessionState;
+  /** false for public boards (no account; jobs are applied to on the site). */
+  login_required?: boolean;
   last_checked: string | null;
   /** Backend addition: why a check could not run (session is then "unknown"). */
   error?: string;
@@ -71,7 +74,7 @@ export type TaskSnapshot = {
   result?: unknown;
   error?: unknown;
   /** For apply: { dry_run, requested } so the UI can re-attach after a reload. */
-  meta?: { dry_run?: boolean; requested?: number };
+  meta?: { dry_run?: boolean; requested?: number; autopilot?: boolean; slot?: string };
   progress?: { done: number; total: number };
 };
 
@@ -85,6 +88,7 @@ export type SearchParams = {
   /** Maximum jobs to return; null means no overall cap. */
   max_jobs: number | null;
   exclude_companies?: string[];
+  visa_sponsored_only?: boolean;
 };
 export type PlatformRunState = 'queued' | 'fetching' | 'done' | 'failed' | 'skipped';
 export type PlatformFailReason = 'captcha_required' | 'session_expired' | 'timeout' | 'error';
@@ -290,8 +294,62 @@ export type InterviewSessionState = {
 // Task event maps, used to type the SSE subscriptions.
 export type TaskEvents = {
   search: { platform: SearchPlatformEvent; jobs: SearchJobsEvent; done: SearchDoneEvent };
-  apply: { job: ApplyJobEvent; progress: ApplyProgressEvent; done: ApplyDoneEvent };
+  // status: autopilot runs report their phase (searching, then applying) before the job events.
+  apply: { job: ApplyJobEvent; progress: ApplyProgressEvent; done: ApplyDoneEvent; status: { phase: 'searching' | 'applying'; message: string } };
   // The contract says done {platform}; the backend sends {platform: id, status, platform_info}. Both are handled.
   login: { status: { state: LoginState; message?: string }; done: { platform: PlatformInfo | string; status?: string; platform_info?: PlatformInfo } };
   analyse: { step: AnalyseStepEvent; done: { review: Review } };
 };
+
+// Answer bank
+export type SavedAnswer = { id: number; question: string; answer: string; source: 'you' | 'manual'; uses: number; created_at: string; updated_at: string };
+export type PendingQuestion = {
+  id: number;
+  question: string;
+  kind: 'text' | 'radio' | 'checkbox' | 'chips';
+  options: string[];
+  platform: string | null;
+  job_title: string | null;
+  company: string | null;
+  apply_url: string | null;
+  times_seen: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// Autopilot
+export type AutopilotConfig = {
+  enabled: boolean;
+  live: boolean;
+  times: string[];
+  platforms: string[];
+  keywords: string[];
+  location: string;
+  min_score: number;
+  daily_caps: Record<string, number>;
+  wait_for_me: boolean;
+};
+export type AutopilotRun = {
+  id: number;
+  run_date: string;
+  slot: string;
+  live: number;
+  status: 'running' | 'done' | 'cancelled' | 'error' | 'interrupted';
+  task_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  searched: number;
+  selected: number;
+  applied: number;
+  failed: number;
+  skipped: number;
+  message: string | null;
+};
+export type AutopilotStatus = {
+  config: AutopilotConfig;
+  next_run_at: string | null;
+  running_task_id: string | null;
+  today: Record<string, number>;
+  runs: AutopilotRun[];
+};
+export type AutopilotUpdate = Partial<AutopilotConfig> & { confirm?: 'APPLY' };
