@@ -31,6 +31,9 @@ FAKE_CONFIG = {
                        "generative ai": "4", "llm": "4", "langchain": "2", "pytorch": "1",
                        "scikit-learn": "3", "computer vision": "3"},
         "preferred_locations": ["Delhi NCR", "Gurugram", "Hyderabad", "Jaipur", "Remote", "Bengaluru"],
+        "standard_answers": {"willing_to_relocate": "Yes", "needs_visa_sponsorship": "No",
+                             "authorized_to_work": "Yes", "open_to_work_conditions": "Yes",
+                             "background_declarations": "No", "consent": "Yes"},
     },
 }
 _cfg_path = Path(_TMP) / "config.json"
@@ -261,6 +264,21 @@ class TestAutofill(unittest.TestCase):
         self.assertEqual(answer_question("Will you require visa sponsorship?", self.p), "No")
         self.assertEqual(answer_question("Graduation year", self.p), "2019")
         self.assertIsNone(answer_question("What is your favourite colour?", self.p))
+
+    def test_standard_answers_come_from_config(self):
+        ask = lambda q, prof: answer_question(q, prof, kind="radio", options=["Yes", "No"])  # noqa: E731
+        questions = ["Are you willing to relocate?", "Will you require visa sponsorship?",
+                     "Are you legally authorized to work in India?", "Are you comfortable working from office?",
+                     "Do you have any criminal record?", "Do you agree to the privacy policy?"]
+        # nothing set: never guessed, so the question goes to the Answers page
+        bare = {**self.p, "autofill": {k: v for k, v in self.p["autofill"].items() if k != "standard_answers"}}
+        for q in questions:
+            self.assertIsNone(ask(q, bare), q)
+        # set in config: used as given
+        custom = {**self.p, "autofill": {**self.p["autofill"], "standard_answers": {
+            "willing_to_relocate": "No", "needs_visa_sponsorship": "Yes", "authorized_to_work": "No",
+            "open_to_work_conditions": "No", "background_declarations": "No", "consent": "Yes"}}}
+        self.assertEqual([ask(q, custom) for q in questions], ["No", "Yes", "No", "No", "No", "Yes"])
 
 
 class TestParsers(unittest.TestCase):

@@ -197,6 +197,25 @@ def _saved_answer(question: str) -> str | None:
     return lookup(question)
 
 
+# Your standing answers to common yes/no questions, from autofill.standard_answers in
+# config.json. Nothing is assumed: a key that isn't set leaves the question unanswered,
+# so it is saved to the Answers page for you instead of being guessed.
+STANDARD_ANSWERS = {
+    "willing_to_relocate": "Are you willing to relocate?",
+    "needs_visa_sponsorship": "Will you need visa sponsorship?",
+    "authorized_to_work": "Are you legally authorized to work in the job's country?",
+    "open_to_work_conditions": "Comfortable with office/hybrid work, shifts, commute, own laptop, in-person interviews?",
+    "background_declarations": "Disability, criminal record, worked here before, related to an employee?",
+    "consent": "Agree to terms, privacy policy and background verification?",
+}
+
+
+def _standard(af: dict, key: str) -> str | None:
+    value = (af.get("standard_answers") or {}).get(key)
+    value = str(value).strip() if value is not None else ""
+    return value or None
+
+
 def answer_question(question: str, profile: dict, kind: str = "text",
                     options: Iterable[str] | None = None) -> str | None:
     """Best answer for a question, or None if we cannot answer it confidently.
@@ -293,7 +312,7 @@ def answer_question(question: str, profile: dict, kind: str = "text",
 
     # --- location -----------------------------------------------------------
     elif _has(q, r"relocat"):
-        answer = "Yes"
+        answer = _standard(af, "willing_to_relocate")
     elif _has(q, r"preferred (work )?location", r"preferred city", r"location preference"):
         prefs = af.get("preferred_locations") or []
         if options:
@@ -323,10 +342,10 @@ def answer_question(question: str, profile: dict, kind: str = "text",
 
     # --- yes/no defaults ----------------------------------------------------
     elif _has(q, r"sponsorship", r"\bvisa\b", r"\bh1b?\b"):
-        answer = "No"
+        answer = _standard(af, "needs_visa_sponsorship")
     elif _has(q, r"authori[sz]ed to work", r"legally (eligible|allowed|permitted)", r"right to work",
               r"eligible to work"):
-        answer = "Yes"
+        answer = _standard(af, "authorized_to_work")
     elif _has(q, r"(full.?time|part.?time|permanent|contract\w*) employee (with|of|at|in)\b",
               r"\b(been )?employed (with|by|at)\b", r"\bworked as an? (full.?time )?employee\b"):
         # "Have you worked as a full-time employee with InfoEdge?": Yes only for a
@@ -335,16 +354,16 @@ def answer_question(question: str, profile: dict, kind: str = "text",
         answer = "Yes" if any(e and e in _norm(question) for e in employers) else "No"
     elif _has(q, r"disabilit", r"criminal", r"convicted", r"previously (worked|employed|applied)",
               r"worked (with|for) us", r"ex.?employee", r"related to anyone"):
-        answer = "No"
+        answer = _standard(af, "background_declarations")
     elif _has(q, r"\bconsent\b", r"\bagree\b", r"acknowledge", r"privacy", r"terms",
               r"background (check|verification)", r"\bbgv\b"):
-        answer = "Yes"
+        answer = _standard(af, "consent")
     elif _has(q, r"comfortable", r"willing", r"are you (ok|okay|fine|open|able|available)",
               r"can you (work|commute|attend|join)", r"work from office", r"\bwfo\b", r"hybrid",
               r"on.?site", r"interested in", r"do you have (a |your own )?laptop",
               r"rotational shifts?", r"night shifts?", r"(face to face|f2f|in.?person) interview",
               r"reliable (transport|internet)"):
-        answer = "Yes"
+        answer = _standard(af, "open_to_work_conditions")
     elif _has(q, r"^do you (know|have (experience|knowledge|hands.?on))",
               r"have you (ever )?(worked|used|built|developed|deployed|implemented|designed|created)",
               r"are you (familiar|proficient|experienced)", r"hands.?on"):
