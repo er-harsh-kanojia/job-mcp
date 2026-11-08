@@ -45,6 +45,14 @@
     "highest_qualification": "B.Tech",
     "graduation_year": "2020",
     "last_working_day": "Currently Working",
+    "standard_answers": {
+      "willing_to_relocate": "",
+      "needs_visa_sponsorship": "",
+      "authorized_to_work": "",
+      "open_to_work_conditions": "",
+      "background_declarations": "",
+      "consent": ""
+    },
     "experience": {
       "python": "3",
       "machine learning": "2",
